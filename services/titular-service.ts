@@ -42,7 +42,7 @@ export interface TitularStats {
 }
 
 // URL base de la API
-// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
 
 // Función para obtener los headers de autenticación
 // const getAuthHeaders = () => {
@@ -141,36 +141,97 @@ export const titularService = {
     }
   },
 
-  // Crear un nuevo titular
+// Crear un nuevo titular
   crearTitular: async (datos: Omit<Titular, "id" | "fechaAlta">): Promise<TitularResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/titulares`, {
-    //     method: 'POST',
-    //     headers: getAuthHeaders(),
-    //     body: JSON.stringify(datos)
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error('Error al crear titular:', error);
-    //   throw error;
-    // }
+  try {
+    // Transformar los datos para adaptarlos al formato esperado por el backend
+    const [nombre, apellido] = datos.nombreApellido.split(" ", 2)
+    const apellidoCompleto = datos.nombreApellido.substring(nombre.length + 1)
+    
+    // Procesar el factor Rh para siempre enviar el formato correcto al backend
+    const factorRhMayus = datos.factorRh.toUpperCase();
+    const factorRhValido = 
+      factorRhMayus === "POSITIVO" || 
+      factorRhMayus === "+" || 
+      datos.factorRh === "+" ? 
+      "POSITIVO" : "NEGATIVO";
+    
+    // Procesar donante de órganos para siempre enviar booleano
+    const esDonanteOrganos = 
+      datos.donanteOrganos === "SI" || 
+      datos.donanteOrganos === "si" || 
+      datos.donanteOrganos === "Sí" || 
+      datos.donanteOrganos === "SÍ";
+    
+    // Log para depuración
+    console.log("Datos originales:", { 
+      factorRh: datos.factorRh, 
+      donanteOrganos: datos.donanteOrganos 
+    });
+    console.log("Datos transformados:", { 
+      factorRh: factorRhValido, 
+      donanteOrganos: esDonanteOrganos 
+    });
+
+    const datosParaEnviar = {
+      nombre: nombre,
+      apellido: apellidoCompleto || apellido,
+      fechaNacimiento: datos.fechaNacimiento,
+      tipoDocumento: datos.tipoDocumento,
+      numeroDocumento: datos.numeroDocumento,
+      grupoSanguineo: datos.grupoSanguineo,
+      factorRh: factorRhValido,
+      direccion: datos.direccion,
+      donanteOrganos: esDonanteOrganos,
+    }
+    
+    console.log("Enviando al backend:", JSON.stringify(datosParaEnviar));
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/titulares`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(datosParaEnviar),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Error del servidor:", errorText);
+      throw new Error(`Error ${response.status}: ${response.statusText || errorText}`);
+    }
+
+    const responseData = await response.json()
+    console.log("Respuesta del backend:", responseData);
+
+    // Transformar la respuesta del backend al formato esperado por el frontend
+    const titularCreado: Titular = {
+      id: responseData.id,
+      tipoDocumento: responseData.tipoDocumento,
+      numeroDocumento: responseData.numeroDocumento,
+      nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
+      fechaNacimiento: responseData.fechaNacimiento,
+      direccion: responseData.direccion,
+      grupoSanguineo: responseData.grupoSanguineo,
+      factorRh: responseData.factorRh === "POSITIVO" ? "positivo" : "negativo",
+      donanteOrganos: responseData.donanteOrganos ? "si" : "no",
+      fechaAlta: new Date().toISOString().split("T")[0],
+    }
 
     return {
       success: true,
       message: "Titular creado correctamente",
-      titular: {
-        ...datos,
-        id: 1,
-        fechaAlta: new Date().toISOString().split("T")[0],
-      } as Titular,
+      titular: titularCreado,
     }
-  },
+  } catch (error) {
+    console.error("Error al crear titular:", error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Error desconocido al crear titular",
+      titular: {} as Titular,
+    }
+  }
+},
 
   // Actualizar un titular existente
   actualizarTitular: async (

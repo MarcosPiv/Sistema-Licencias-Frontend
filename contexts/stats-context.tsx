@@ -1,8 +1,6 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { licenciaService } from "@/services/licencia-service"
-import { titularService } from "@/services/titular-service"
 
 // Definir la interfaz para las estadísticas
 interface Stats {
@@ -32,6 +30,9 @@ export const useStats = () => {
   return context
 }
 
+// URL base de la API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
+
 // Props para el proveedor
 interface StatsProviderProps {
   children: ReactNode
@@ -46,30 +47,59 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
   })
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
-  // Función para cargar las estadísticas
-  const loadStats = async () => {
+  // Función para cargar las estadísticas desde la API
+  const loadStatsFromAPI = async () => {
     try {
       setIsLoading(true)
 
-      // Obtener licencias
-      const licenciasResponse = await licenciaService.listarLicencias()
-      const licenciasEmitidas = licenciasResponse.success ? licenciasResponse.total : 0
+      // Obtener token de autenticación (si es necesario)
+      const token = localStorage.getItem("authToken")
 
-      // Obtener licencias vencidas
-      const vencidasResponse = await licenciaService.obtenerLicenciasVencidas()
-      const licenciasVencidas = vencidasResponse.success ? vencidasResponse.total : 0
+      // Configurar headers para las peticiones
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
 
-      // Obtener estadísticas de titulares
-      const titularesStats = await titularService.obtenerEstadisticas()
-      const titularesRegistrados = titularesStats.total || 0
+      // Realizar peticiones en paralelo para mejorar el rendimiento
+      const [licenciasResponse, vencidasResponse, titularesResponse] = await Promise.all([
+        // Endpoint para obtener total de licencias emitidas
+        fetch(`${API_BASE_URL}/estadisticas/licencias/total`, { headers }),
 
+        // Endpoint para obtener total de licencias vencidas
+        fetch(`${API_BASE_URL}/estadisticas/licencias/vencidas`, { headers }),
+
+        // Endpoint para obtener total de titulares registrados
+        fetch(`${API_BASE_URL}/estadisticas/titulares/total`, { headers }),
+      ])
+
+      // Verificar si alguna petición falló
+      if (!licenciasResponse.ok || !vencidasResponse.ok || !titularesResponse.ok) {
+        throw new Error("Error al obtener estadísticas de la API")
+      }
+
+      // Convertir respuestas a JSON
+      const licenciasData = await licenciasResponse.json()
+      const vencidasData = await vencidasResponse.json()
+      const titularesData = await titularesResponse.json()
+
+      // Actualizar el estado con los datos de la API
       setStats({
-        licenciasEmitidas,
-        licenciasVencidas,
-        titularesRegistrados,
+        licenciasEmitidas: licenciasData.total || 0,
+        licenciasVencidas: vencidasData.total || 0,
+        titularesRegistrados: titularesData.total || 0,
+      })
+
+      console.log("Estadísticas cargadas desde la API:", {
+        licenciasEmitidas: licenciasData.total,
+        licenciasVencidas: vencidasData.total,
+        titularesRegistrados: titularesData.total,
       })
     } catch (error) {
-      console.error("Error al cargar estadísticas:", error)
+      console.error("Error al cargar estadísticas desde la API:", error)
+
+      // En caso de error, mantener los valores actuales
+      // Opcionalmente, podrías cargar datos locales como fallback
     } finally {
       setIsLoading(false)
     }
@@ -77,28 +107,66 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
 
   // Cargar estadísticas iniciales
   useEffect(() => {
-    loadStats()
+    loadStatsFromAPI()
   }, [])
 
   // Función para incrementar licencias emitidas
-  const incrementLicenciasEmitidas = () => {
+  const incrementLicenciasEmitidas = async () => {
+    // Incrementar localmente para UI inmediata
     setStats((prevStats) => ({
       ...prevStats,
       licenciasEmitidas: prevStats.licenciasEmitidas + 1,
     }))
+
+    // Opcionalmente, notificar al backend sobre el incremento
+    try {
+      const token = localStorage.getItem("authToken")
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
+
+      // Esta petición dependerá de cómo esté diseñada tu API
+      await fetch(`${API_BASE_URL}/estadisticas/licencias/incrementar`, {
+        method: "POST",
+        headers,
+      })
+    } catch (error) {
+      console.error("Error al notificar incremento de licencias:", error)
+      // No revertimos el incremento local para evitar confusión al usuario
+    }
   }
 
   // Función para incrementar titulares registrados
-  const incrementTitularesRegistrados = () => {
+  const incrementTitularesRegistrados = async () => {
+    // Incrementar localmente para UI inmediata
     setStats((prevStats) => ({
       ...prevStats,
       titularesRegistrados: prevStats.titularesRegistrados + 1,
     }))
+
+    // Opcionalmente, notificar al backend sobre el incremento
+    try {
+      const token = localStorage.getItem("authToken")
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
+
+      // Esta petición dependerá de cómo esté diseñada tu API
+      await fetch(`${API_BASE_URL}/estadisticas/titulares/incrementar`, {
+        method: "POST",
+        headers,
+      })
+    } catch (error) {
+      console.error("Error al notificar incremento de titulares:", error)
+      // No revertimos el incremento local para evitar confusión al usuario
+    }
   }
 
   // Función para refrescar todas las estadísticas
   const refreshStats = async () => {
-    await loadStats()
+    await loadStatsFromAPI()
   }
 
   // Valor del contexto

@@ -170,7 +170,7 @@ export default function TitularForm({ role }: TitularFormProps) {
         return
       }
 
-      // Crear el nuevo titular
+     // Crear el nuevo titular
       const response = await titularService.crearTitular({
         tipoDocumento: values.tipoDocumento,
         numeroDocumento: values.numeroDocumento,
@@ -181,7 +181,6 @@ export default function TitularForm({ role }: TitularFormProps) {
         factorRh: values.factorRh,
         donanteOrganos: values.donanteOrganos,
       })
-
       if (response.success) {
         // Incrementar el contador de titulares registrados
         incrementTitularesRegistrados()
@@ -354,7 +353,7 @@ export default function TitularForm({ role }: TitularFormProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="0">0</SelectItem>
+                            <SelectItem value="O">0</SelectItem> 
                             <SelectItem value="A">A</SelectItem>
                             <SelectItem value="B">B</SelectItem>
                             <SelectItem value="AB">AB</SelectItem>
@@ -399,11 +398,11 @@ export default function TitularForm({ role }: TitularFormProps) {
                         <FormControl>
                           <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-6">
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="Si" id="donante-si" />
+                              <RadioGroupItem value="SI" id="donante-si" />
                               <Label htmlFor="donante-si">Sí</Label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="No" id="donante-no" />
+                              <RadioGroupItem value="NO" id="donante-no" />
                               <Label htmlFor="donante-no">No</Label>
                             </div>
                           </RadioGroup>
