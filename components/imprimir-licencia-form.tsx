@@ -12,7 +12,7 @@ import Image from "next/image"
 import { jsPDF } from "jspdf"
 import { Input } from "@/components/ui/input"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { licenciasEmitidas } from "@/data/licencia-data" // Importar desde el archivo compartido
+import type { licenciasEmitidas } from "@/data/licencia-data" // Importar desde el archivo compartido
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import gsap from "gsap"
@@ -42,6 +42,9 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
   const [resultadosBusqueda, setResultadosBusqueda] = useState<typeof licenciasEmitidas>([])
   const [errorBusqueda, setErrorBusqueda] = useState<string>("")
   const [busquedaRealizada, setBusquedaRealizada] = useState(false)
+  // Primero, añadir los estados necesarios para manejar la carga
+  // Añadir después de la declaración de los otros estados:
+  const [isLoading, setIsLoading] = useState(false)
 
   // Función de utilidad para animar elementos con error
   const animateErrorField = (element: HTMLElement | null) => {
@@ -107,27 +110,31 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
       // Para DNI, solo permitir números
       const onlyNumbers = value.replace(/[^0-9]/g, "")
       setNumeroDocumento(onlyNumbers)
-    } else if (tipoDocumento === "Pasaporte") {
-      // Para Pasaporte, convertir a mayúsculas
-      setNumeroDocumento(value.toUpperCase())
+    } else if (tipoDocumento === "PASAPORTE") { 
+      // Para Pasaporte, permitir letras, números y algunos caracteres especiales
+      // Convertir a mayúsculas y permitir caracteres alfanuméricos y guiones
+      const validPassportChars = value.toUpperCase().replace(/[^A-Z0-9-]/g, "")
+      setNumeroDocumento(validPassportChars)
     } else {
       // Si no hay tipo seleccionado, permitir cualquier entrada
       setNumeroDocumento(value)
     }
   }
 
-  // Función para buscar licencias
-  const buscarLicencia = () => {
+  // Reemplazar la función buscarLicencia con esta implementación que usa el API real:
+  const buscarLicencia = async () => {
     setErrorBusqueda("")
     setResultadosBusqueda([])
     setLicenciaSeleccionada(null)
     setBusquedaRealizada(true)
+    setIsLoading(true)
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
 
     if (!tipoDocumento || !numeroDocumento) {
       setErrorBusqueda("Debe completar tipo y número de documento")
+      setIsLoading(false)
       // Animación de error mejorada
       if (currentFormRef.current) {
         gsap.fromTo(
@@ -169,66 +176,112 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
       return
     }
 
-    // Buscar en la base de datos simulada
-    const resultados = licenciasEmitidas.filter(
-      (licencia) =>
-        licencia.titular.tipoDocumento === tipoDocumento && licencia.titular.numeroDocumento === numeroDocumento,
-    )
+    try {
+      // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+      // Realizar la petición al API
+      const response = await fetch(
+        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+      )
 
-    if (resultados.length === 0) {
-      setErrorBusqueda("No se encontraron licencias con ese documento")
-      // Animación de error mejorada
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // Verificar si hay licencias
+      if (!data.licencias || data.licencias.length === 0) {
+        setErrorBusqueda("No se encontraron licencias con ese documento")
+        setIsLoading(false)
+
+        // Animación de error mejorada
+        if (currentFormRef.current) {
+          gsap.fromTo(
+            currentFormRef.current,
+            { x: -8 },
+            { x: 8, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+          )
+
+          // Animar el mensaje de error para que sea más visible
+          setTimeout(() => {
+            const errorAlert = currentFormRef.current?.querySelector('[role="alert"]')
+            if (errorAlert) {
+              gsap.fromTo(
+                errorAlert,
+                { scale: 0.95, opacity: 0.8 },
+                {
+                  scale: 1,
+                  opacity: 1,
+                  duration: 0.3,
+                  ease: "back.out(1.7)",
+                },
+              )
+            }
+          }, 100)
+        }
+        return
+      }
+
+      // Mapear los datos recibidos al formato que espera el componente
+      const licenciasFormateadas = data.licencias.map((licencia) => ({
+        id: licencia.id,
+        numeroLicencia: licencia.id.toString(),
+        titular: {
+          id: data.titular.id,
+          tipoDocumento: data.titular.tipoDocumento,
+          numeroDocumento: data.titular.numeroDocumento,
+          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
+          fechaNacimiento: data.titular.fechaNacimiento,
+          direccion: data.titular.direccion,
+          grupoSanguineo: data.titular.grupoSanguineo,
+          factorRh: data.titular.factorRh,
+          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: licencia.clase,
+        fechaEmision: licencia.fechaEmision,
+        fechaVencimiento: licencia.fechaVencimiento,
+        vigencia: licencia.vigenciaAnios,
+        costo: licencia.costo,
+        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
+      }))
+
+      // Animación de éxito en la búsqueda
+      if (currentFormRef.current) {
+        gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
+          scale: 1.03,
+          duration: 0.2,
+          stagger: 0.05,
+          yoyo: true,
+          repeat: 1,
+        })
+      }
+
+      setResultadosBusqueda(licenciasFormateadas)
+    } catch (error) {
+      console.error("Error al buscar licencias:", error)
+      setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
+
+      // Animación de error
       if (currentFormRef.current) {
         gsap.fromTo(
           currentFormRef.current,
           { x: -8 },
-          { x: 8, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+          { x: 8, duration: 0.1, repeat: 3, yoyo: true, ease: "power2.inOut" },
         )
-
-        // Animar el mensaje de error para que sea más visible
-        setTimeout(() => {
-          const errorAlert = currentFormRef.current?.querySelector('[role="alert"]')
-          if (errorAlert) {
-            gsap.fromTo(
-              errorAlert,
-              { scale: 0.95, opacity: 0.8 },
-              {
-                scale: 1,
-                opacity: 1,
-                duration: 0.3,
-                ease: "back.out(1.7)",
-              },
-            )
-          }
-        }, 100)
       }
-      return
-    }
-
-    // Animación de éxito en la búsqueda
-    if (currentFormRef.current) {
-      gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
-        scale: 1.03,
-        duration: 0.2,
-        stagger: 0.05,
-        yoyo: true,
-        repeat: 1,
-      })
-    }
-
-    setResultadosBusqueda(resultados)
-
-    // Si solo hay un resultado, seleccionarlo automáticamente
-    if (resultados.length === 1) {
-      seleccionarLicencia(resultados[0])
+    } finally {
+      setIsLoading(false)
     }
   }
 
   // Función para seleccionar una licencia
   const seleccionarLicencia = (licencia: (typeof licenciasEmitidas)[0]) => {
     // Animación de transición
-    if (searchFormRef.current) {
-      gsap.to(searchFormRef.current, {
+    const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
+
+    if (currentFormRef.current) {
+      gsap.to(currentFormRef.current, {
         y: -10,
         opacity: 0,
         duration: 0.3,
@@ -238,7 +291,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
 
           // Animar la aparición de la previsualización
           setTimeout(() => {
-            if (licenciaPreviewRef.current) {
+            if (licenciaPreviewRef.current && activeTab === "licencia") {
               gsap.fromTo(
                 licenciaPreviewRef.current,
                 { opacity: 0, y: 20 },
@@ -246,11 +299,19 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
               )
             }
 
-            if (fotoSectionRef.current) {
+            if (fotoSectionRef.current && activeTab === "licencia") {
               gsap.fromTo(
                 fotoSectionRef.current,
                 { opacity: 0, y: 20 },
                 { opacity: 1, y: 0, duration: 0.5, delay: 0.2, ease: "back.out(1.2)" },
+              )
+            }
+
+            if (comprobanteRef.current && activeTab === "comprobante") {
+              gsap.fromTo(
+                comprobanteRef.current,
+                { opacity: 0, y: 20 },
+                { opacity: 1, y: 0, duration: 0.5, ease: "back.out(1.2)" },
               )
             }
           }, 100)
@@ -663,50 +724,93 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                         onChange={(e) => {
                           handleNumeroDocumentoChange(e)
 
-                          // Validación en tiempo real para DNI
+                          // Validación en tiempo real
                           if (tipoDocumento === "DNI" && !/^\d+$/.test(e.target.value) && e.target.value.length > 0) {
+                            animateErrorField(e.target)
+                          } else if (
+                            tipoDocumento === "Pasaporte" &&
+                            !/^[A-Z0-9-]+$/.test(e.target.value.toUpperCase()) &&
+                            e.target.value.length > 0
+                          ) {
                             animateErrorField(e.target)
                           }
                         }}
-                        maxLength={tipoDocumento === "DNI" ? 8 : 9}
+                        maxLength={tipoDocumento === "DNI" ? 8 : 15} // Aumentar el maxLength para pasaportes
                       />
                     </div>
 
                     <div className="flex items-end">
-                      <Button onClick={buscarLicencia} className="w-full">
-                        <Search className="h-4 w-4 mr-2" />
-                        Buscar
+                      {/* Modificar los botones de búsqueda para mostrar el estado de carga */}
+                      {/* Buscar el botón de búsqueda en la pestaña de licencia y reemplazarlo con: */}
+                      <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                        {isLoading ? (
+                          <>
+                            <span className="animate-spin mr-2">⏳</span>
+                            Buscando...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="h-4 w-4 mr-2" />
+                            Buscar
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
 
                   {busquedaRealizada && resultadosBusqueda.length > 0 && (
                     <div className="mt-6">
-                      <h4 className="font-medium mb-2 dark:text-white">Resultados de la búsqueda</h4>
+                      <h4 className="font-medium mb-2 dark:text-white">Licencias disponibles para imprimir</h4>
                       <div className="space-y-2">
-                        {resultadosBusqueda.map((licencia) => (
-                          <div
-                            key={licencia.numeroLicencia}
-                            className="p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                            onClick={() => seleccionarLicencia(licencia)}
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="font-medium dark:text-white">{licencia.titular.nombreApellido}</p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  {licencia.titular.tipoDocumento} {licencia.titular.numeroDocumento} - Clase{" "}
-                                  {licencia.claseLicencia}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm dark:text-white">N° {licencia.numeroLicencia}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                  Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-ES")}
-                                </p>
+                        {resultadosBusqueda.map((licencia) => {
+                          // Determinar si la licencia está vencida
+                          const fechaVencimiento = new Date(licencia.fechaVencimiento)
+                          const hoy = new Date()
+                          const diasParaVencer = Math.floor(
+                            (fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24),
+                          )
+
+                          // Determinar el estado y color de la licencia
+                          let estadoLicencia = ""
+                          let colorEstado = ""
+
+                          if (diasParaVencer < 0) {
+                            estadoLicencia = "Vencida"
+                            colorEstado = "text-red-500"
+                          } else if (diasParaVencer < 30) {
+                            estadoLicencia = "Próxima a vencer"
+                            colorEstado = "text-amber-500"
+                          } else {
+                            estadoLicencia = "Vigente"
+                            colorEstado = "text-green-500"
+                          }
+
+                          return (
+                            <div
+                              key={licencia.numeroLicencia}
+                              className="p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+                              onClick={() => seleccionarLicencia(licencia)}
+                            >
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <p className="font-medium dark:text-white">{licencia.titular.nombreApellido}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                      Clase {licencia.claseLicencia}
+                                    </p>
+                                    <span className={`text-xs font-medium ${colorEstado}`}>• {estadoLicencia}</span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm dark:text-white">N° {licencia.numeroLicencia}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-ES")}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -978,8 +1082,12 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                           <div className="flex justify-between mt-2">
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
                               <span className="font-semibold">Tipo de sangre:</span>{" "}
-                              {licenciaSeleccionada?.titular.grupoSanguineo}
-                              {licenciaSeleccionada?.titular.factorRh}
+                              {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
+                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO" 
+                                ? "Positivo" 
+                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO" 
+                                  ? "Negativo" 
+                                  : licenciaSeleccionada?.titular.factorRh}
                             </div>
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
                               <span className="font-semibold">Donante:</span>{" "}
@@ -1062,9 +1170,20 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                     </div>
 
                     <div className="flex items-end">
-                      <Button onClick={buscarLicencia} className="w-full">
-                        <Search className="h-4 w-4 mr-2" />
-                        Buscar
+                      {/* Modificar los botones de búsqueda para mostrar el estado de carga */}
+                      {/* Buscar el botón de búsqueda en la pestaña de comprobante y reemplazarlo con: */}
+                      <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                        {isLoading ? (
+                          <>
+                            <span className="animate-spin mr-2">⏳</span>
+                            Buscando...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="h-4 w-4 mr-2" />
+                            Buscar
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -1141,7 +1260,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                           size="sm"
                           onClick={() => {
                             setLicenciaSeleccionada(null)
-                            setBusquedaRealizada(false)
+                            setBusquedaRealizada(true) // Mantener los resultados de búsqueda visibles
                           }}
                         >
                           Cambiar Comprobante

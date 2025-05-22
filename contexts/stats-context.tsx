@@ -51,6 +51,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
   const loadStatsFromAPI = async () => {
     try {
       setIsLoading(true)
+      console.log("Cargando estadísticas desde la API...")
 
       // Obtener token de autenticación (si es necesario)
       const token = localStorage.getItem("authToken")
@@ -64,104 +65,89 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       // Realizar peticiones en paralelo para mejorar el rendimiento
       const [licenciasResponse, vencidasResponse, titularesResponse] = await Promise.all([
         // Endpoint para obtener total de licencias emitidas
-        fetch(`${API_BASE_URL}/estadisticas/licencias/total`, { headers }),
+        fetch(`${API_BASE_URL}/licencias/emitidas/count`, { headers }),
 
         // Endpoint para obtener total de licencias vencidas
-        fetch(`${API_BASE_URL}/estadisticas/licencias/vencidas`, { headers }),
+        fetch(`${API_BASE_URL}/licencias/vencidas/count`, { headers }),
 
         // Endpoint para obtener total de titulares registrados
-        fetch(`${API_BASE_URL}/estadisticas/titulares/total`, { headers }),
+        fetch(`${API_BASE_URL}/titulares/count`, { headers }),
       ])
 
       // Verificar si alguna petición falló
-      if (!licenciasResponse.ok || !vencidasResponse.ok || !titularesResponse.ok) {
-        throw new Error("Error al obtener estadísticas de la API")
+      if (!licenciasResponse.ok) {
+        console.error(`Error en la petición de licencias emitidas: ${licenciasResponse.status}`)
+        throw new Error(`Error al obtener licencias emitidas: ${licenciasResponse.statusText}`)
+      }
+      if (!vencidasResponse.ok) {
+        console.error(`Error en la petición de licencias vencidas: ${vencidasResponse.status}`)
+        throw new Error(`Error al obtener licencias vencidas: ${vencidasResponse.statusText}`)
+      }
+      if (!titularesResponse.ok) {
+        console.error(`Error en la petición de titulares: ${titularesResponse.status}`)
+        throw new Error(`Error al obtener titulares: ${titularesResponse.statusText}`)
       }
 
-      // Convertir respuestas a JSON
-      const licenciasData = await licenciasResponse.json()
-      const vencidasData = await vencidasResponse.json()
-      const titularesData = await titularesResponse.json()
+      // Obtener el texto de las respuestas
+      const licenciasText = await licenciasResponse.text()
+      const vencidasText = await vencidasResponse.text()
+      const titularesText = await titularesResponse.text()
+
+      console.log("Respuesta de licencias emitidas (texto):", licenciasText)
+      console.log("Respuesta de licencias vencidas (texto):", vencidasText)
+      console.log("Respuesta de titulares (texto):", titularesText)
+
+      // Convertir los textos a números
+      const licenciasEmitidas = Number.parseInt(licenciasText, 10) || 0
+      const licenciasVencidas = Number.parseInt(vencidasText, 10) || 0
+      const titularesRegistrados = Number.parseInt(titularesText, 10) || 0
 
       // Actualizar el estado con los datos de la API
       setStats({
-        licenciasEmitidas: licenciasData.total || 0,
-        licenciasVencidas: vencidasData.total || 0,
-        titularesRegistrados: titularesData.total || 0,
+        licenciasEmitidas,
+        licenciasVencidas,
+        titularesRegistrados,
       })
 
       console.log("Estadísticas cargadas desde la API:", {
-        licenciasEmitidas: licenciasData.total,
-        licenciasVencidas: vencidasData.total,
-        titularesRegistrados: titularesData.total,
+        licenciasEmitidas,
+        licenciasVencidas,
+        titularesRegistrados,
       })
     } catch (error) {
       console.error("Error al cargar estadísticas desde la API:", error)
 
-      // En caso de error, mantener los valores actuales
-      // Opcionalmente, podrías cargar datos locales como fallback
     } finally {
       setIsLoading(false)
     }
   }
+
 
   // Cargar estadísticas iniciales
   useEffect(() => {
     loadStatsFromAPI()
   }, [])
 
-  // Función para incrementar licencias emitidas
-  const incrementLicenciasEmitidas = async () => {
+  // Función para incrementar licencias emitidas (solo actualiza el estado local)
+  const incrementLicenciasEmitidas = () => {
     // Incrementar localmente para UI inmediata
     setStats((prevStats) => ({
       ...prevStats,
       licenciasEmitidas: prevStats.licenciasEmitidas + 1,
     }))
 
-    // Opcionalmente, notificar al backend sobre el incremento
-    try {
-      const token = localStorage.getItem("authToken")
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      }
-
-      // Esta petición dependerá de cómo esté diseñada tu API
-      await fetch(`${API_BASE_URL}/estadisticas/licencias/incrementar`, {
-        method: "POST",
-        headers,
-      })
-    } catch (error) {
-      console.error("Error al notificar incremento de licencias:", error)
-      // No revertimos el incremento local para evitar confusión al usuario
-    }
+    console.log("Contador de licencias emitidas incrementado localmente")
   }
 
-  // Función para incrementar titulares registrados
-  const incrementTitularesRegistrados = async () => {
+  // Función para incrementar titulares registrados (solo actualiza el estado local)
+  const incrementTitularesRegistrados = () => {
     // Incrementar localmente para UI inmediata
     setStats((prevStats) => ({
       ...prevStats,
       titularesRegistrados: prevStats.titularesRegistrados + 1,
     }))
 
-    // Opcionalmente, notificar al backend sobre el incremento
-    try {
-      const token = localStorage.getItem("authToken")
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      }
-
-      // Esta petición dependerá de cómo esté diseñada tu API
-      await fetch(`${API_BASE_URL}/estadisticas/titulares/incrementar`, {
-        method: "POST",
-        headers,
-      })
-    } catch (error) {
-      console.error("Error al notificar incremento de titulares:", error)
-      // No revertimos el incremento local para evitar confusión al usuario
-    }
+    console.log("Contador de titulares registrados incrementado localmente")
   }
 
   // Función para refrescar todas las estadísticas

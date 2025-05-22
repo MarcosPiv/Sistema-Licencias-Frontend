@@ -12,7 +12,7 @@ import Image from "next/image"
 import { jsPDF } from "jspdf"
 import { Input } from "@/components/ui/input"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { licenciasEmitidas } from "@/data/licencia-data" // Importar desde el archivo compartido
+import type { licenciasEmitidas } from "@/data/licencia-data" // Importar desde el archivo compartido
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import gsap from "gsap"
@@ -42,6 +42,9 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
   const [resultadosBusqueda, setResultadosBusqueda] = useState<typeof licenciasEmitidas>([])
   const [errorBusqueda, setErrorBusqueda] = useState<string>("")
   const [busquedaRealizada, setBusquedaRealizada] = useState(false)
+  // Primero, añadir los estados necesarios para manejar la carga
+  // Añadir después de la declaración de los otros estados:
+  const [isLoading, setIsLoading] = useState(false)
 
   // Función de utilidad para animar elementos con error
   const animateErrorField = (element: HTMLElement | null) => {
@@ -114,18 +117,20 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
   }
 
-  // Función para buscar licencias
-  const buscarLicencia = () => {
+  // Reemplazar la función buscarLicencia con esta implementación que usa el API real:
+  const buscarLicencia = async () => {
     setErrorBusqueda("")
     setResultadosBusqueda([])
     setLicenciaSeleccionada(null)
     setBusquedaRealizada(true)
+    setIsLoading(true)
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
 
     if (!tipoDocumento || !numeroDocumento) {
       setErrorBusqueda("Debe completar tipo y número de documento")
+      setIsLoading(false)
       // Animación de error
       if (currentFormRef.current) {
         // Animación de error más notoria para móviles
@@ -168,59 +173,103 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
       return
     }
 
-    // Buscar en la base de datos simulada
-    const resultados = licenciasEmitidas.filter(
-      (licencia) =>
-        licencia.titular.tipoDocumento === tipoDocumento && licencia.titular.numeroDocumento === numeroDocumento,
-    )
+    try {
+            // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+      // Realizar la petición al API
+      const response = await fetch(
+        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+      )
 
-    if (resultados.length === 0) {
-      setErrorBusqueda("No se encontraron licencias con ese documento")
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // Verificar si hay licencias
+      if (!data.licencias || data.licencias.length === 0) {
+        setErrorBusqueda("No se encontraron licencias con ese documento")
+        setIsLoading(false)
+
+        // Animación de error
+        if (currentFormRef.current) {
+          // Animación de error más notoria para móviles
+          gsap.fromTo(
+            currentFormRef.current,
+            { x: -10 },
+            { x: 10, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+          )
+
+          // Animar el mensaje de error para que sea más visible
+          setTimeout(() => {
+            const errorAlert = currentFormRef.current?.querySelector('[role="alert"]')
+            if (errorAlert) {
+              gsap.fromTo(
+                errorAlert,
+                { scale: 0.95, opacity: 0.8 },
+                {
+                  scale: 1,
+                  opacity: 1,
+                  duration: 0.3,
+                  ease: "back.out(1.7)",
+                },
+              )
+            }
+          }, 100)
+        }
+        return
+      }
+
+      // Mapear los datos recibidos al formato que espera el componente
+      const licenciasFormateadas = data.licencias.map((licencia) => ({
+        id: licencia.id,
+        numeroLicencia: licencia.id.toString(),
+        titular: {
+          id: data.titular.id,
+          tipoDocumento: data.titular.tipoDocumento,
+          numeroDocumento: data.titular.numeroDocumento,
+          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
+          fechaNacimiento: data.titular.fechaNacimiento,
+          direccion: data.titular.direccion,
+          grupoSanguineo: data.titular.grupoSanguineo,
+          factorRh: data.titular.factorRh,
+          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: licencia.clase,
+        fechaEmision: licencia.fechaEmision,
+        fechaVencimiento: licencia.fechaVencimiento,
+        vigencia: licencia.vigenciaAnios,
+        costo: licencia.costo,
+        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
+      }))
+
+      // Animación de éxito en la búsqueda
+      if (currentFormRef.current) {
+        gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
+          scale: 1.03,
+          duration: 0.2,
+          stagger: 0.05,
+          yoyo: true,
+          repeat: 1,
+        })
+      }
+
+      setResultadosBusqueda(licenciasFormateadas)
+    } catch (error) {
+      console.error("Error al buscar licencias:", error)
+      setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
+
       // Animación de error
       if (currentFormRef.current) {
-        // Animación de error más notoria para móviles
         gsap.fromTo(
           currentFormRef.current,
           { x: -10 },
-          { x: 10, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+          { x: 10, duration: 0.1, repeat: 3, yoyo: true, ease: "power2.inOut" },
         )
-
-        // Animar el mensaje de error para que sea más visible
-        setTimeout(() => {
-          const errorAlert = currentFormRef.current?.querySelector('[role="alert"]')
-          if (errorAlert) {
-            gsap.fromTo(
-              errorAlert,
-              { scale: 0.95, opacity: 0.8 },
-              {
-                scale: 1,
-                opacity: 1,
-                duration: 0.3,
-                ease: "back.out(1.7)",
-              },
-            )
-          }
-        }, 100)
       }
-      return
-    }
-
-    // Animación de éxito en la búsqueda
-    if (currentFormRef.current) {
-      gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
-        scale: 1.03,
-        duration: 0.2,
-        stagger: 0.05,
-        yoyo: true,
-        repeat: 1,
-      })
-    }
-
-    setResultadosBusqueda(resultados)
-
-    // Si solo hay un resultado, seleccionarlo automáticamente
-    if (resultados.length === 1) {
-      seleccionarLicencia(resultados[0])
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -392,6 +441,39 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         return "text-xl"
       default:
         return baseSize
+    }
+  }
+
+  // Función para determinar el estado de la licencia
+  const getLicenciaEstado = (fechaVencimiento: string) => {
+    const hoy = new Date()
+    const vencimiento = new Date(fechaVencimiento)
+
+    // Calcular la diferencia en días
+    const diferenciaTiempo = vencimiento.getTime() - hoy.getTime()
+    const diferenciaDias = Math.ceil(diferenciaTiempo / (1000 * 3600 * 24))
+
+    if (diferenciaDias < 0) {
+      // Licencia vencida
+      return {
+        texto: "Vencida",
+        color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+        borde: "border-red-200 dark:border-red-800",
+      }
+    } else if (diferenciaDias <= 60) {
+      // Próxima a vencer (menos de 60 días)
+      return {
+        texto: "Próxima a vencer",
+        color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+        borde: "border-amber-200 dark:border-amber-800",
+      }
+    } else {
+      // Vigente
+      return {
+        texto: "Vigente",
+        color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+        borde: "border-green-200 dark:border-green-800",
+      }
     }
   }
 
@@ -656,42 +738,64 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                       />
                     </div>
 
-                    <Button onClick={buscarLicencia} className="w-full">
-                      <Search className="h-4 w-4 mr-2" />
-                      Buscar
+                    {/* Modificar los botones de búsqueda para mostrar el estado de carga
+                    // Buscar el botón de búsqueda en la pestaña de licencia y reemplazarlo con: */}
+                    <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <span className="animate-spin mr-2">⏳</span>
+                          Buscando...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-2" />
+                          Buscar
+                        </>
+                      )}
                     </Button>
                   </div>
 
                   {busquedaRealizada && resultadosBusqueda.length > 0 && (
                     <div className="mt-6">
-                      <h4 className="font-medium mb-2 dark:text-white">Resultados de la búsqueda</h4>
-                      <div className="space-y-2">
-                        {resultadosBusqueda.map((licencia) => (
-                          <div
-                            key={licencia.numeroLicencia}
-                            className="p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                            onClick={() => seleccionarLicencia(licencia)}
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className={`font-medium dark:text-white ${getTextSizeClass("text-sm")}`}>
-                                  {licencia.titular.nombreApellido}
-                                </p>
-                                <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                  {licencia.titular.tipoDocumento} {licencia.titular.numeroDocumento}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className={`dark:text-white ${getTextSizeClass("text-sm")}`}>
-                                  Clase {licencia.claseLicencia}
-                                </p>
-                                <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                  {licencia.numeroLicencia}
-                                </p>
+                      <h4 className="font-medium mb-2 dark:text-white">Licencias disponibles</h4>
+                      <div className="space-y-3">
+                        {resultadosBusqueda.map((licencia) => {
+                          const estado = getLicenciaEstado(licencia.fechaVencimiento)
+                          return (
+                            <div
+                              key={licencia.numeroLicencia}
+                              className={`p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors ${estado.borde}`}
+                              onClick={() => seleccionarLicencia(licencia)}
+                            >
+                              <div className="flex flex-col space-y-2">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className={`font-medium dark:text-white ${getTextSizeClass("text-sm")}`}>
+                                      Clase {licencia.claseLicencia}
+                                    </p>
+                                    <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
+                                      N° {licencia.numeroLicencia}
+                                    </p>
+                                  </div>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${estado.color}`}>
+                                    {estado.texto}
+                                  </span>
+                                </div>
+
+                                <div className="flex justify-between items-end">
+                                  <div>
+                                    <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
+                                      Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-AR")}
+                                    </p>
+                                  </div>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2">
+                                    Seleccionar
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -711,10 +815,10 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                         onClick={() => {
                           setLicenciaSeleccionada(null)
                           setFotoTitular(null)
-                          setBusquedaRealizada(false)
+                          setBusquedaRealizada(true) // Mantener los resultados de búsqueda visibles
                         }}
                       >
-                        Cambiar
+                        Cambiar licencia
                       </Button>
                     </div>
 
@@ -910,9 +1014,13 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                                 <span className="font-semibold">Clase:</span> {licenciaSeleccionada?.claseLicencia}
                               </div>
                               <div>
-                                <span className="font-semibold">Tipo de sangre:</span>{" "}
-                                {licenciaSeleccionada?.titular.grupoSanguineo}
-                                {licenciaSeleccionada?.titular.factorRh}
+                              <span className="font-semibold">Tipo de sangre:</span>{" "}
+                              {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
+                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO" 
+                                ? "Positivo" 
+                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO" 
+                                  ? "Negativo" 
+                                  : licenciaSeleccionada?.titular.factorRh}
                               </div>
                               <div className="text-right">
                                 <span className="font-semibold">Donante:</span>{" "}
@@ -1000,42 +1108,64 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                       />
                     </div>
 
-                    <Button onClick={buscarLicencia} className="w-full">
-                      <Search className="h-4 w-4 mr-2" />
-                      Buscar
+                    {/* Modificar los botones de búsqueda para mostrar el estado de carga
+                    // Buscar el botón de búsqueda en la pestaña de comprobante y reemplazarlo con: */}
+                    <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <span className="animate-spin mr-2">⏳</span>
+                          Buscando...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-2" />
+                          Buscar
+                        </>
+                      )}
                     </Button>
                   </div>
 
                   {busquedaRealizada && resultadosBusqueda.length > 0 && (
                     <div className="mt-6">
-                      <h4 className="font-medium mb-2 dark:text-white">Resultados de la búsqueda</h4>
-                      <div className="space-y-2">
-                        {resultadosBusqueda.map((licencia) => (
-                          <div
-                            key={licencia.numeroLicencia}
-                            className="p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                            onClick={() => seleccionarLicencia(licencia)}
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className={`font-medium dark:text-white ${getTextSizeClass("text-sm")}`}>
-                                  {licencia.titular.nombreApellido}
-                                </p>
-                                <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                  {licencia.titular.tipoDocumento} {licencia.titular.numeroDocumento}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className={`dark:text-white ${getTextSizeClass("text-sm")}`}>
-                                  Clase {licencia.claseLicencia}
-                                </p>
-                                <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                  {licencia.numeroLicencia}
-                                </p>
+                      <h4 className="font-medium mb-2 dark:text-white">Licencias disponibles</h4>
+                      <div className="space-y-3">
+                        {resultadosBusqueda.map((licencia) => {
+                          const estado = getLicenciaEstado(licencia.fechaVencimiento)
+                          return (
+                            <div
+                              key={licencia.numeroLicencia}
+                              className={`p-3 border rounded-md dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors ${estado.borde}`}
+                              onClick={() => seleccionarLicencia(licencia)}
+                            >
+                              <div className="flex flex-col space-y-2">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className={`font-medium dark:text-white ${getTextSizeClass("text-sm")}`}>
+                                      Clase {licencia.claseLicencia}
+                                    </p>
+                                    <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
+                                      N° {licencia.numeroLicencia}
+                                    </p>
+                                  </div>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${estado.color}`}>
+                                    {estado.texto}
+                                  </span>
+                                </div>
+
+                                <div className="flex justify-between items-end">
+                                  <div>
+                                    <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
+                                      Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-AR")}
+                                    </p>
+                                  </div>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2">
+                                    Seleccionar
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}
