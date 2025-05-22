@@ -174,7 +174,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
 
     try {
-            // Convertir el tipo de documento a mayúsculas para la API
+      // Convertir el tipo de documento a mayúsculas para la API
       const tipoDocumentoAPI = tipoDocumento.toUpperCase()
       // Realizar la petición al API
       const response = await fetch(
@@ -319,9 +319,6 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
       fileInputRef.current.click()
     }
   }
-
-  // Replace the entire normalizarOrientacionImagen function with this improved version
-  // that avoids any potential destructuring of undefined variables
 
   const normalizarOrientacionImagen = (imagenDataUrl: string): Promise<string> => {
     return new Promise((resolve) => {
@@ -571,7 +568,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         pdf.setFillColor(240, 240, 240)
         pdf.rect(margin, margin, contentWidth, 25, "F")
 
-        // Logo eliminado por solicitud del usuario
+        // Logo eliminado, no le gusto al profe
         //pdf.setFillColor(200, 200, 200)
         //pdf.rect(margin + 5, margin + 5, 15, 15, "F")
 

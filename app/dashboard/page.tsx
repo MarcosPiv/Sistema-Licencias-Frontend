@@ -63,7 +63,7 @@ export default function Dashboard() {
         },
       })
 
-      // Animar el título - muy rápido
+      // Animar el título
       if (titleRef.current) {
         timeline.fromTo(titleRef.current, { y: -5, opacity: 0.5 }, { y: 0, opacity: 1, duration: 0.2 })
       }
@@ -78,7 +78,7 @@ export default function Dashboard() {
         )
       }
 
-      // Animar los contadores - versión simple y rápida
+      // Animar los contadores - no anda
       counterRefs.current.forEach((counter, index) => {
         if (counter) {
           const target = Number.parseInt(counter.getAttribute("data-target") || "0")

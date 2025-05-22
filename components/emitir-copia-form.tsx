@@ -115,7 +115,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
       return
     }
 
-    // Simular una pequeña demora para mostrar el estado de carga
+    // Simular una pequeña demora para mostrar el estado de carga 
     setTimeout(() => {
       // Buscar todas las licencias asociadas al documento
       const licenciasDelTitular = licenciasEmitidas.filter(

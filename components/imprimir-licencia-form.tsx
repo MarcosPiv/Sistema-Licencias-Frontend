@@ -565,7 +565,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         pdf.setFillColor(240, 240, 240)
         pdf.rect(margin, margin, contentWidth, 25, "F")
 
-        // Logo eliminado por solicitud del usuario
+        // Logo eliminado por solicitud del profe
         // Añadir logo (simulado con un rectángulo)
         // pdf.setFillColor(200, 200, 200)
         // pdf.rect(margin + 5, margin + 5, 15, 15, "F")

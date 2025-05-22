@@ -15,7 +15,7 @@ import * as z from "zod"
 import gsap from "gsap"
 import { useToast } from "@/hooks/use-toast"
 
-// Datos de ejemplo para operadores
+// Datos de ejemplo para operadores -se tiene q borrar 
 const operadoresEjemplo = [
   {
     id: 1,

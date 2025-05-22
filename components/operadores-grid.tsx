@@ -9,7 +9,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 
-// Datos de ejemplo para operadores
+// Datos de ejemplo para operadores- hay q eliminar
 const operadoresEjemplo = [
   {
     id: 1,
