@@ -36,7 +36,7 @@ export async function buscarLicenciasPorTitular(
 ): Promise<LicenciasTitularResponse> {
   try {
     const response = await fetch(
-      `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumento}&numeroDocumento=${numeroDocumento}`,
+      `${process.env.NEXT_PUBLIC_API_URL}/licencias/titular?tipoDocumento=${tipoDocumento}&numeroDocumento=${numeroDocumento}`,
     )
 
     if (!response.ok) {

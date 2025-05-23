@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,6 +26,7 @@ interface ImprimirLicenciaFormProps {
 
 export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isMobile = useIsMobile()
 
   // Añadir esta línea justo después de la línea donde se declara el hook isMobile
@@ -94,6 +95,149 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
   }, [])
 
+  // Reemplazar el useEffect actual para cargar parámetros de la URL con esta versión mejorada:
+
+  // Modificar el useEffect para ejecutar la búsqueda de forma más confiable
+  useEffect(() => {
+    const tipoDoc = searchParams.get("tipoDocumento")
+    const numDoc = searchParams.get("numeroDocumento")
+    const autoSearch = searchParams.get("autoSearch")
+
+    console.log("Parámetros de URL detectados (mobile):", { tipoDoc, numDoc, autoSearch })
+
+    if (tipoDoc && numDoc) {
+      console.log("Autocompletando campos con:", tipoDoc, numDoc)
+      setTipoDocumento(tipoDoc)
+      setNumeroDocumento(numDoc)
+
+      // Si autoSearch es true, realizar la búsqueda automáticamente
+      if (autoSearch === "true") {
+        console.log("Ejecutando búsqueda automática...")
+
+        // Usar un timeout más largo para asegurar que los estados se actualicen
+        const timer = setTimeout(() => {
+          console.log("Estados actualizados, ejecutando búsqueda...")
+          // Llamar directamente a la función de búsqueda con los valores de los parámetros
+          // en lugar de depender de los estados que podrían no estar actualizados
+          buscarLicenciaConParametros(tipoDoc, numDoc)
+        }, 1000)
+
+        // Limpiar el timeout si el componente se desmonta
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [searchParams]) // Dependencia en searchParams para que se ejecute cuando cambien
+
+  // Añadir esta nueva función que usa directamente los parámetros en lugar de los estados
+  const buscarLicenciaConParametros = async (tipoDocParam: string, numDocParam: string) => {
+    console.log("Iniciando búsqueda (mobile) con parámetros directos:", { tipoDocParam, numDocParam })
+
+    setErrorBusqueda("")
+    setResultadosBusqueda([])
+    setLicenciaSeleccionada(null)
+    setBusquedaRealizada(true)
+    setIsLoading(true)
+
+    // Determinar qué referencia usar según la pestaña activa
+    const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
+
+    if (!tipoDocParam || !numDocParam) {
+      console.log("Faltan datos en los parámetros (mobile):", { tipoDocParam, numDocParam })
+      setErrorBusqueda("Debe completar tipo y número de documento")
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      console.log("Realizando petición al API (mobile) con parámetros directos...")
+      // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocParam.toUpperCase()
+
+      // Añadir animación de carga al botón
+      if (currentFormRef.current) {
+        const searchButton = currentFormRef.current.querySelector("button[disabled]")
+        if (searchButton) {
+          gsap.to(searchButton, {
+            backgroundColor: "rgba(100, 116, 139, 0.1)",
+            repeat: -1,
+            yoyo: true,
+            duration: 0.8,
+          })
+        }
+      }
+
+      // Realizar la petición al API con el tipo de documento en mayúsculas
+      const response = await fetch(
+        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
+      )
+
+      console.log("Respuesta del API (mobile):", response.status)
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log("Datos recibidos (mobile):", data)
+
+      // Verificar si hay licencias
+      if (!data.licencias || data.licencias.length === 0) {
+        setErrorBusqueda("No se encontraron licencias con ese documento")
+        setIsLoading(false)
+        return
+      }
+
+      // Mapear los datos recibidos al formato que espera el componente
+      const licenciasFormateadas = data.licencias.map((licencia) => ({
+        id: licencia.id,
+        numeroLicencia: licencia.id.toString(),
+        titular: {
+          id: data.titular.id,
+          tipoDocumento: data.titular.tipoDocumento,
+          numeroDocumento: data.titular.numeroDocumento,
+          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
+          fechaNacimiento: data.titular.fechaNacimiento,
+          direccion: data.titular.direccion,
+          grupoSanguineo: data.titular.grupoSanguineo,
+          factorRh: data.titular.factorRh,
+          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: licencia.clase,
+        fechaEmision: licencia.fechaEmision,
+        fechaVencimiento: licencia.fechaVencimiento,
+        vigencia: licencia.vigenciaAnios,
+        costo: licencia.costo,
+        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
+      }))
+
+      // Animación de éxito en la búsqueda
+      if (currentFormRef.current) {
+        gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
+          scale: 1.03,
+          duration: 0.2,
+          stagger: 0.05,
+          yoyo: true,
+          repeat: 1,
+        })
+      }
+
+      setResultadosBusqueda(licenciasFormateadas)
+
+      // Si solo hay un resultado, seleccionarlo automáticamente
+      if (licenciasFormateadas.length === 1) {
+        console.log("Seleccionando automáticamente la única licencia encontrada (mobile)")
+        setTimeout(() => {
+          seleccionarLicencia(licenciasFormateadas[0])
+        }, 500)
+      }
+    } catch (error) {
+      console.error("Error al buscar licencias con parámetros directos (mobile):", error)
+      setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // Manejar cambio en el tipo de documento
   const handleTipoDocumentoChange = (value: string) => {
     setTipoDocumento(value)
@@ -117,8 +261,11 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
   }
 
-  // Reemplazar la función buscarLicencia con esta implementación que usa el API real:
+  // También actualizar la función buscarLicencia para mejor debugging:
+
   const buscarLicencia = async () => {
+    console.log("Iniciando búsqueda (mobile) con:", { tipoDocumento, numeroDocumento })
+
     setErrorBusqueda("")
     setResultadosBusqueda([])
     setLicenciaSeleccionada(null)
@@ -129,6 +276,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
 
     if (!tipoDocumento || !numeroDocumento) {
+      console.log("Faltan datos (mobile):", { tipoDocumento, numeroDocumento })
       setErrorBusqueda("Debe completar tipo y número de documento")
       setIsLoading(false)
       // Animación de error
@@ -174,18 +322,36 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
 
     try {
+      console.log("Realizando petición al API (mobile)...")
       // Convertir el tipo de documento a mayúsculas para la API
       const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+
+      // Añadir animación de carga al botón
+      if (currentFormRef.current) {
+        const searchButton = currentFormRef.current.querySelector("button[disabled]")
+        if (searchButton) {
+          gsap.to(searchButton, {
+            backgroundColor: "rgba(100, 116, 139, 0.1)",
+            repeat: -1,
+            yoyo: true,
+            duration: 0.8,
+          })
+        }
+      }
+
       // Realizar la petición al API
       const response = await fetch(
         `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
       )
+
+      console.log("Respuesta del API (mobile):", response.status)
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log("Datos recibidos (mobile):", data)
 
       // Verificar si hay licencias
       if (!data.licencias || data.licencias.length === 0) {
@@ -708,7 +874,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
                   <div className="space-y-4 mb-4">
                     <div>
-                      <Select value={tipoDocumento} onValueChange={handleTipoDocumentoChange}>
+                      <Select value={tipoDocumento} onValueChange={handleTipoDocumentoChange} disabled={isLoading}>
                         <SelectTrigger>
                           <SelectValue placeholder="Tipo de Documento" />
                         </SelectTrigger>
@@ -732,16 +898,19 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                           }
                         }}
                         maxLength={tipoDocumento === "DNI" ? 8 : 9}
+                        disabled={isLoading}
                       />
                     </div>
 
                     {/* Modificar los botones de búsqueda para mostrar el estado de carga
                     // Buscar el botón de búsqueda en la pestaña de licencia y reemplazarlo con: */}
-                    <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                    <Button onClick={buscarLicencia} className="w-full relative" disabled={isLoading}>
                       {isLoading ? (
                         <>
-                          <span className="animate-spin mr-2">⏳</span>
-                          Buscando...
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 dark:border-slate-600 dark:border-t-slate-300 rounded-full animate-spin"></div>
+                          </div>
+                          <span className="opacity-0">Buscar</span>
                         </>
                       ) : (
                         <>
@@ -1011,13 +1180,13 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                                 <span className="font-semibold">Clase:</span> {licenciaSeleccionada?.claseLicencia}
                               </div>
                               <div>
-                              <span className="font-semibold">Tipo de sangre:</span>{" "}
-                              {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
-                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO" 
-                                ? "Positivo" 
-                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO" 
-                                  ? "Negativo" 
-                                  : licenciaSeleccionada?.titular.factorRh}
+                                <span className="font-semibold">Tipo de sangre:</span>{" "}
+                                {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
+                                {licenciaSeleccionada?.titular.factorRh === "POSITIVO"
+                                  ? "Positivo"
+                                  : licenciaSeleccionada?.titular.factorRh === "NEGATIVO"
+                                    ? "Negativo"
+                                    : licenciaSeleccionada?.titular.factorRh}
                               </div>
                               <div className="text-right">
                                 <span className="font-semibold">Donante:</span>{" "}
@@ -1078,7 +1247,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
                   <div className="space-y-4 mb-4">
                     <div>
-                      <Select value={tipoDocumento} onValueChange={handleTipoDocumentoChange}>
+                      <Select value={tipoDocumento} onValueChange={handleTipoDocumentoChange} disabled={isLoading}>
                         <SelectTrigger>
                           <SelectValue placeholder="Tipo de Documento" />
                         </SelectTrigger>
@@ -1102,16 +1271,19 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                           }
                         }}
                         maxLength={tipoDocumento === "DNI" ? 8 : 9}
+                        disabled={isLoading}
                       />
                     </div>
 
                     {/* Modificar los botones de búsqueda para mostrar el estado de carga
                     // Buscar el botón de búsqueda en la pestaña de comprobante y reemplazarlo con: */}
-                    <Button onClick={buscarLicencia} className="w-full" disabled={isLoading}>
+                    <Button onClick={buscarLicencia} className="w-full relative" disabled={isLoading}>
                       {isLoading ? (
                         <>
-                          <span className="animate-spin mr-2">⏳</span>
-                          Buscando...
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 dark:border-slate-600 dark:border-t-slate-300 rounded-full animate-spin"></div>
+                          </div>
+                          <span className="opacity-0">Buscar</span>
                         </>
                       ) : (
                         <>

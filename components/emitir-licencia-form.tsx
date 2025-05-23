@@ -9,23 +9,27 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, CheckCircle2, Search, ArrowLeft } from "lucide-react"
+import { AlertCircle, CheckCircle2, Search, ArrowLeft, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
-import { titularesDB } from "@/data/titular-data"
 import gsap from "gsap"
 
 // Importar las funciones y datos de clases de licencias
-import {
-  clasesLicencia,
-  calcularVigencia,
-  calcularCosto,
-  calcularFechaVencimiento,
-  puedeObtenerLicenciaProfesional,
-} from "@/data/clases-licencia"
+import { clasesLicencia } from "@/data/clases-licencia"
 
 // Importar el hook de estadísticas
 import { useStats } from "@/contexts/stats-context"
+
+// Importar los servicios
+import { titularService } from "@/services/titular-service"
+import { licenciaService } from "@/services/licencia-service"
+
+// Definir el tipo para la solicitud de emisión de licencia
+interface EmitirLicenciaRequest {
+  titularId: string
+  clase: string
+  observaciones: string
+}
 
 // Tipo para el titular
 interface Titular {
@@ -39,6 +43,7 @@ interface Titular {
   donanteOrganos: string
   edad: number
   licenciasAnteriores?: any[] // Licencias anteriores del titular
+  id: string // Asegúrate de que el tipo Titular incluya el campo 'id'
 }
 
 interface EmitirLicenciaFormProps {
@@ -71,6 +76,22 @@ const animateErrorField = (element: HTMLElement | null) => {
   gsap.fromTo(element, { x: -5 }, { x: 5, duration: 0.1, repeat: 4, yoyo: true })
 }
 
+// Función para calcular la edad a partir de la fecha de nacimiento
+const calcularEdad = (fechaNacimiento: string): number => {
+  const fechaNac = new Date(fechaNacimiento)
+  const hoy = new Date()
+
+  let edad = hoy.getFullYear() - fechaNac.getFullYear()
+  const mes = hoy.getMonth() - fechaNac.getMonth()
+
+  // Si no ha llegado el mes de cumpleaños o si es el mes pero no ha llegado el día
+  if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) {
+    edad--
+  }
+
+  return edad
+}
+
 export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -80,12 +101,13 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
   const [titular, setTitular] = useState<Titular | null>(null)
   const [error, setError] = useState<string>("")
   const [success, setSuccess] = useState<boolean>(false)
-  const [vigencia, setVigencia] = useState<number>(0)
-  const [costo, setCosto] = useState<number>(0)
+  const [vigencia, setVigencia] = useState<number | null>(null)
+  const [costo, setCosto] = useState<number | null>(null)
   const [errorEdad, setErrorEdad] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [errorProfesional, setErrorProfesional] = useState<string>("")
+  const [isEmitiendo, setIsEmitiendo] = useState<boolean>(false)
   const [esPrimeraVez, setEsPrimeraVez] = useState<boolean>(true)
+  const [datosLicencia, setDatosLicencia] = useState<any>(null)
 
   const formRef = useRef<HTMLDivElement>(null)
   const busquedaRef = useRef<HTMLDivElement>(null)
@@ -130,7 +152,7 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
 
   useEffect(() => {
     if (claseLicencia && titular) {
-      calcularVigenciaYCosto()
+      verificarRequisitos()
 
       // Animar la sección de emisión
       if (emitirRef.current) {
@@ -177,13 +199,15 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
     }
   }
 
-  // Función de búsqueda que puede recibir parámetros opcionales
+  // Actualizar la función buscarTitular para usar el servicio actualizado
   const buscarTitular = (tipoDoc?: string, numDoc?: string) => {
     setError("")
     setErrorEdad("")
-    setErrorProfesional("")
     setTitular(null)
     setIsLoading(true)
+    setVigencia(null)
+    setCosto(null)
+    setDatosLicencia(null)
 
     // Usar los parámetros proporcionados o los valores del estado
     const tipo = tipoDoc || tipoDocumento
@@ -233,14 +257,12 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
       return
     }
 
-    try {
-      // Simular una pequeña demora para mostrar el estado de carga
-      setTimeout(() => {
-        // Buscar en la base de datos de titulares importada
-        const titularEncontrado = titularesDB.find((t) => t.tipoDocumento === tipo && t.numeroDocumento === numero)
-
-        if (!titularEncontrado) {
-          setError("No se encontró ningún titular con ese documento")
+    // Usar el servicio de titulares para buscar
+    titularService
+      .obtenerTitularPorDocumento(tipo, numero)
+      .then((response) => {
+        if (!response.success) {
+          setError(response.message)
           setIsLoading(false)
           // Animación de error mejorada
           if (busquedaRef.current) {
@@ -284,7 +306,7 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
                 opacity: 0.8,
                 duration: 0.3,
                 onComplete: () => {
-                  setTitular(titularEncontrado)
+                  setTitular(response.titular)
                   setIsLoading(false)
                   // Animar la aparición de los datos del titular
                   setTimeout(() => {
@@ -301,15 +323,15 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
             },
           })
         } else {
-          setTitular(titularEncontrado)
+          setTitular(response.titular)
           setIsLoading(false)
         }
-      }, 500) // Pequeña demora para mostrar el estado de carga
-    } catch (error) {
-      console.error("Error al buscar titular:", error)
-      setError("Ocurrió un error al buscar el titular. Por favor, intente nuevamente.")
-      setIsLoading(false)
-    }
+      })
+      .catch((error) => {
+        console.error("Error al buscar titular:", error)
+        setError("Ocurrió un error al buscar el titular. Por favor, intente nuevamente.")
+        setIsLoading(false)
+      })
   }
 
   useEffect(() => {
@@ -319,11 +341,10 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
     }
   }, [])
 
-  const calcularVigenciaYCosto = () => {
+  const verificarRequisitos = () => {
     if (!titular || !claseLicencia) return
 
     setErrorEdad("")
-    setErrorProfesional("")
 
     // Obtener la clase de licencia seleccionada
     const claseSeleccionada = clasesLicencia.find((c) => c.id === claseLicencia)
@@ -333,68 +354,79 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
       return
     }
 
+    // Calcular la edad actual del titular
+    const edadActual = calcularEdad(titular.fechaNacimiento)
+
     // Verificar edad mínima según clase
-    if (titular.edad < claseSeleccionada.edadMinima) {
+    if (edadActual < claseSeleccionada.edadMinima) {
       setErrorEdad(`La edad mínima para la clase ${claseLicencia} es de ${claseSeleccionada.edadMinima} años`)
-      setVigencia(0)
-      setCosto(0)
       return
-    }
-
-    // Verificar requisitos adicionales para licencias profesionales
-    if (claseSeleccionada.esProfesional) {
-      const verificacion = puedeObtenerLicenciaProfesional(titular.edad, titular.licenciasAnteriores || [])
-
-      if (!verificacion.puede) {
-        setErrorProfesional(verificacion.motivo)
-        setVigencia(0)
-        setCosto(0)
-        return
-      }
     }
 
     // Determinar si es primera vez para esta clase
     const tieneEstaClase = (titular.licenciasAnteriores || []).some((lic) => lic.claseLicencia === claseLicencia)
     setEsPrimeraVez(!tieneEstaClase)
-
-    // Calcular vigencia según edad y si es primera vez
-    const vigenciaCalculada = calcularVigencia(titular.edad, !tieneEstaClase)
-
-    // Calcular costo según clase y vigencia
-    const costoCalculado = calcularCosto(claseLicencia, vigenciaCalculada, false)
-
-    setVigencia(vigenciaCalculada)
-    setCosto(costoCalculado)
   }
 
   const emitirLicencia = () => {
     try {
-      // Calcular fecha de vencimiento basada en la fecha de nacimiento
-      const fechaVencimiento = calcularFechaVencimiento(titular.fechaNacimiento, vigencia)
+      // Preparar los datos para emitir la licencia
+      const datos: EmitirLicenciaRequest = {
+        titularId: titular.id,
+        clase: claseLicencia,
+        observaciones: "",
+      }
 
-      // En producción, aquí se enviarían los datos al backend
-      console.log({
-        titular,
-        claseLicencia,
-        vigencia,
-        costo,
-        fechaEmision: new Date().toISOString(),
-        fechaVencimiento,
-        esPrimeraVez,
-        usuarioAdmin: role,
-      })
+      // Mostrar estado de carga
+      setIsEmitiendo(true)
 
-      // Incrementar el contador de licencias emitidas
-      incrementLicenciasEmitidas()
+      // Llamar al servicio para emitir la licencia
+      licenciaService
+        .emitirLicencia(datos)
+        .then((response) => {
+          setIsEmitiendo(false)
 
-      // Mostrar mensaje de éxito inmediatamente
-      setSuccess(true)
+          if (!response.success) {
+            setError(response.message)
+            return
+          }
 
-      // Redireccionar después de 2 segundos para dar tiempo a ver el mensaje
-      setTimeout(() => {
-        router.push(`/dashboard/licencias/imprimir?role=${role}`)
-      }, 2000)
+          // Actualizar vigencia y costo con los valores del backend
+          if (response.licencia) {
+            setVigencia(response.licencia.vigencia)
+            setCosto(response.licencia.costo)
+            setDatosLicencia(response.licencia)
+          }
+
+          // Incrementar el contador de licencias emitidas
+          incrementLicenciasEmitidas()
+
+          // Mostrar mensaje de éxito
+          setSuccess(true)
+
+          // Redireccionar después de 2 segundos con los datos de la licencia emitida
+          setTimeout(() => {
+            const params = new URLSearchParams({
+              role: role,
+              tipoDocumento: titular.tipoDocumento,
+              numeroDocumento: titular.numeroDocumento,
+              autoSearch: "true",
+            })
+
+            console.log("Redirigiendo con parámetros:", params.toString())
+            const url = `/dashboard/licencias/imprimir?${params.toString()}`
+            console.log("URL completa:", url)
+
+            router.push(url)
+          }, 2000)
+        })
+        .catch((error) => {
+          setIsEmitiendo(false)
+          console.error("Error al emitir licencia:", error)
+          setError("Ocurrió un error al emitir la licencia. Por favor, intente nuevamente.")
+        })
     } catch (error) {
+      setIsEmitiendo(false)
       console.error("Error al emitir licencia:", error)
       setError("Ocurrió un error al emitir la licencia. Por favor, intente nuevamente.")
     }
@@ -504,7 +536,8 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
                     <div>
                       <Label>Fecha de Nacimiento</Label>
                       <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
-                        {new Date(titular.fechaNacimiento).toLocaleDateString("es-ES")} ({titular.edad} años)
+                        {new Date(titular.fechaNacimiento).toLocaleDateString("es-ES")} (
+                        {calcularEdad(titular.fechaNacimiento)} años)
                       </div>
                     </div>
 
@@ -533,13 +566,6 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
                       </Alert>
                     )}
 
-                    {errorProfesional && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{errorProfesional}</AlertDescription>
-                      </Alert>
-                    )}
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="animate-item">
                         <Label htmlFor="claseLicencia">Clase de Licencia</Label>
@@ -562,16 +588,18 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
                         </Select>
                       </div>
 
-                      {claseLicencia && !errorEdad && !errorProfesional && (
+                      {datosLicencia && (
                         <div className="col-span-2 grid grid-cols-2 gap-4">
                           <div className="animate-item">
                             <Label>Vigencia</Label>
-                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-md">{vigencia} años</div>
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+                              {datosLicencia.vigencia} años
+                            </div>
                           </div>
 
                           <div className="animate-item">
                             <Label>Costo</Label>
-                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-md">${costo}</div>
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-md">${datosLicencia.costo}</div>
                           </div>
                         </div>
                       )}
@@ -588,9 +616,20 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
                         Volver
                       </Button>
 
-                      {claseLicencia && !errorEdad && !errorProfesional && vigencia > 0 && (
-                        <Button onClick={emitirLicencia} className="transition-transform duration-300 hover:scale-105">
-                          Emitir Licencia
+                      {claseLicencia && !errorEdad && (
+                        <Button
+                          onClick={emitirLicencia}
+                          className="transition-transform duration-300 hover:scale-105"
+                          disabled={isEmitiendo}
+                        >
+                          {isEmitiendo ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Emitiendo...
+                            </>
+                          ) : (
+                            "Emitir Licencia"
+                          )}
                         </Button>
                       )}
                     </div>
