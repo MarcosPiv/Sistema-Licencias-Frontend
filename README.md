@@ -25,12 +25,11 @@ npm run dev
 
 El servidor se iniciará en [http://localhost:3000](http://localhost:3000).
 
-## Construcción
+Para configurar el frontend y conectarlo con el backend, crea un archivo `.env.local` en la raíz del proyecto con las siguientes variables:
 
-Para construir el proyecto para producción:
-
-```bash
-npm run build
+```env
+# API connection (requerido)
+NEXT_PUBLIC_API_URL=http://localhost:8080/api
 ```
 
 ## Iniciar en producción
