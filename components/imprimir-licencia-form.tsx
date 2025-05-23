@@ -1242,7 +1242,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                         <div className="absolute top-[40%] left-[10%] right-[10%] text-black">
                           <div className="flex justify-between">
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
-                              <span className="font-semibold">{licenciaSeleccionada?.titular.tipoDocumento}:</span>{" "}
+                              <span className="font-semibold">DNI:</span>{" "}
                               {licenciaSeleccionada?.titular.numeroDocumento}
                             </div>
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
@@ -1252,12 +1252,8 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                           <div className="flex justify-between mt-2">
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
                               <span className="font-semibold">Tipo de sangre:</span>{" "}
-                              {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
-                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO" 
-                                ? "Positivo" 
-                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO" 
-                                  ? "Negativo" 
-                                  : licenciaSeleccionada?.titular.factorRh}
+                              {licenciaSeleccionada?.titular.grupoSanguineo}
+                              {licenciaSeleccionada?.titular.factorRh}
                             </div>
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
                               <span className="font-semibold">Donante:</span>{" "}

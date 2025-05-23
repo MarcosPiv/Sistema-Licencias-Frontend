@@ -406,9 +406,17 @@ export default function EmitirLicenciaForm({ role }: EmitirLicenciaFormProps) {
 
           // Redireccionar después de 2 segundos con los datos de la licencia emitida
           setTimeout(() => {
+            // Formatear el tipo de documento para que coincida con el formato esperado por el frontend
+            const tipoDocumentoFormateado =
+              titular.tipoDocumento === "PASAPORTE"
+                ? "Pasaporte"
+                : titular.tipoDocumento === "DNI"
+                  ? "DNI"
+                  : titular.tipoDocumento
+
             const params = new URLSearchParams({
               role: role,
-              tipoDocumento: titular.tipoDocumento,
+              tipoDocumento: tipoDocumentoFormateado,
               numeroDocumento: titular.numeroDocumento,
               autoSearch: "true",
             })

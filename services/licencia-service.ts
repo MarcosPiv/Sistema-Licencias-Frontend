@@ -303,28 +303,69 @@ export const licenciaService = {
 
   // Obtener licencias vencidas
   obtenerLicenciasVencidas: async (): Promise<LicenciasResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/licencias/vencidas`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error('Error al obtener licencias vencidas:', error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch("http://localhost:8080/api/licencias/vencidas", {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+        },
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      licencias: [],
-      total: 0,
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const licenciasBackend = await response.json()
+
+      // Transformar los datos del backend al formato esperado por el frontend
+      const licenciasTransformadas: Licencia[] = licenciasBackend.map((licencia: any) => ({
+        id: licencia.id,
+        numeroLicencia: licencia.id.toString(),
+        titular: {
+          id: licencia.titular.id,
+          tipoDocumento: licencia.titular.tipoDocumento,
+          numeroDocumento: licencia.titular.numeroDocumento,
+          nombreApellido: `${licencia.titular.apellido}, ${licencia.titular.nombre}`,
+          fechaNacimiento: licencia.titular.fechaNacimiento,
+          direccion: licencia.titular.direccion,
+          grupoSanguineo: licencia.titular.grupoSanguineo,
+          factorRh: licencia.titular.factorRh === "POSITIVO" ? "+" : "-",
+          donanteOrganos: licencia.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: licencia.clase,
+        fechaEmision: licencia.fechaEmision,
+        fechaVencimiento: licencia.fechaVencimiento,
+        vigencia: licencia.vigenciaAnios,
+        costo: licencia.costo,
+        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
+        observaciones: "",
+      }))
+
+      return {
+        success: true,
+        message: "Licencias vencidas obtenidas correctamente",
+        licencias: licenciasTransformadas,
+        total: licenciasTransformadas.length,
+      }
+    } catch (error) {
+      console.error("Error al obtener licencias vencidas:", error)
+
+      // Manejar errores de red
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        return {
+          success: false,
+          message: "Error de conexión. Verifique su conexión a internet e intente nuevamente.",
+          licencias: [],
+          total: 0,
+        }
+      }
+
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al obtener licencias vencidas",
+        licencias: [],
+        total: 0,
+      }
     }
   },
 }

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, AlertTriangle, Calendar, ArrowUpDown, ArrowLeft, Filter } from "lucide-react"
-import { licenciasEmitidas } from "@/data/licencia-data"
+// Agregar el import del servicio al inicio del archivo
+import { licenciaService } from "@/services/licencia-service"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import gsap from "gsap"
@@ -53,26 +54,40 @@ export default function LicenciasVencidasGrid({ role }: { role: string | null })
 
   const tableRef = useRef<HTMLDivElement>(null)
 
+  // Reemplazar el useEffect que filtra las licencias vencidas con:
+
   useEffect(() => {
-    // Filtrar licencias vencidas y calcular días vencidos
-    const hoy = new Date()
-    const vencidas = licenciasEmitidas
-      .filter((licencia) => {
-        const fechaVencimiento = new Date(licencia.fechaVencimiento)
-        return fechaVencimiento < hoy
-      })
-      .map((licencia) => {
-        const fechaVencimiento = new Date(licencia.fechaVencimiento)
-        const diasVencida = Math.floor((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24))
-        return { ...licencia, diasVencida }
-      })
+    const cargarLicenciasVencidas = async () => {
+      try {
+        const response = await licenciaService.obtenerLicenciasVencidas()
 
-    setLicenciasVencidas(vencidas)
+        if (response.success) {
+          // Calcular días vencidos para cada licencia
+          const hoy = new Date()
+          const licenciasConDias = response.licencias.map((licencia) => {
+            const fechaVencimiento = new Date(licencia.fechaVencimiento)
+            const diasVencida = Math.floor((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24))
+            return { ...licencia, diasVencida }
+          })
 
-    // Animación de entrada
-    if (tableRef.current) {
-      gsap.fromTo(tableRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" })
+          setLicenciasVencidas(licenciasConDias)
+        } else {
+          console.error("Error al cargar licencias vencidas:", response.message)
+          // En caso de error, mantener array vacío
+          setLicenciasVencidas([])
+        }
+      } catch (error) {
+        console.error("Error al cargar licencias vencidas:", error)
+        setLicenciasVencidas([])
+      }
+
+      // Animación de entrada
+      if (tableRef.current) {
+        gsap.fromTo(tableRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" })
+      }
     }
+
+    cargarLicenciasVencidas()
   }, [])
 
   // Función para formatear fechas
@@ -188,8 +203,11 @@ export default function LicenciasVencidasGrid({ role }: { role: string | null })
   // Navegar a la página de renovación de licencias con los datos del titular
   const navigateToRenovar = (tipoDocumento: string, numeroDocumento: string) => {
     if (role) {
+      // Asegurar que el tipo de documento esté en el formato correcto
+      const tipoDocumentoFormateado = tipoDocumento === "PASAPORTE" ? "Pasaporte" : "DNI"
+
       router.push(
-        `/dashboard/licencias/renovar?role=${role}&tipoDocumento=${tipoDocumento}&numeroDocumento=${numeroDocumento}&autoSearch=true`,
+        `/dashboard/licencias/renovar?role=${role}&tipoDocumento=${tipoDocumentoFormateado}&numeroDocumento=${numeroDocumento}&autoSearch=true`,
       )
     }
   }
