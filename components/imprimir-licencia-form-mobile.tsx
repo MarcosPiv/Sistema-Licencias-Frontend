@@ -20,6 +20,13 @@ import gsap from "gsap"
 // Importar el nuevo hook al principio del archivo
 import { useDeviceSize } from "@/hooks/use-device-size"
 
+// Añadir esta función helper al inicio del componente, después de las importaciones
+const formatearFecha = (fechaString: string) => {
+  // Crear la fecha agregando la zona horaria local para evitar problemas de UTC
+  const fecha = new Date(fechaString + "T00:00:00")
+  return fecha.toLocaleDateString("es-AR")
+}
+
 interface ImprimirLicenciaFormProps {
   role: string
 }
@@ -139,7 +146,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -276,7 +283,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -757,11 +764,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         pdf.setFont("helvetica", "normal")
         pdf.setFontSize(10)
         pdf.text(`RECIBO N° R-${licenciaSeleccionada.numeroLicencia}`, pageWidth - margin - 60, margin + 10)
-        pdf.text(
-          `FECHA: ${new Date(licenciaSeleccionada.fechaEmision).toLocaleDateString("es-ES")}`,
-          pageWidth - margin - 60,
-          margin + 18,
-        )
+        pdf.text(`FECHA: ${formatearFecha(licenciaSeleccionada.fechaEmision)}`, pageWidth - margin - 60, margin + 18)
 
         // Línea separadora
         pdf.setDrawColor(200, 200, 200)
@@ -961,7 +964,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                                 <div className="flex justify-between items-end">
                                   <div>
                                     <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                      Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-AR")}
+                                      Vence: {formatearFecha(licencia.fechaVencimiento)}
                                     </p>
                                   </div>
                                   <Button size="sm" variant="ghost" className="h-7 px-2">
@@ -1141,17 +1144,15 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                               </p>
                               <p className={`mb-0 leading-tight ${getTextSizeClass("text-[12px]")}`}>
                                 <span className="font-semibold">Fecha de nacimiento:</span>{" "}
-                                {new Date(licenciaSeleccionada?.titular.fechaNacimiento || "").toLocaleDateString(
-                                  "es-AR",
-                                )}
+                                {formatearFecha(licenciaSeleccionada?.titular.fechaNacimiento || "")}
                               </p>
                               <p className={`mb-0 leading-tight ${getTextSizeClass("text-[12px]")}`}>
                                 <span className="font-semibold">Emisión:</span>{" "}
-                                {new Date(licenciaSeleccionada?.fechaEmision || "").toLocaleDateString("es-AR")}
+                                {formatearFecha(licenciaSeleccionada?.fechaEmision || "")}
                               </p>
                               <p className={`mb-0 leading-tight ${getTextSizeClass("text-[12px]")}`}>
                                 <span className="font-semibold">Vencimiento:</span>{" "}
-                                {new Date(licenciaSeleccionada?.fechaVencimiento || "").toLocaleDateString("es-AR")}
+                                {formatearFecha(licenciaSeleccionada?.fechaVencimiento || "")}
                               </p>
                             </div>
 
@@ -1338,7 +1339,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                                 <div className="flex justify-between items-end">
                                   <div>
                                     <p className={`text-slate-500 dark:text-slate-400 ${getTextSizeClass("text-xs")}`}>
-                                      Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-AR")}
+                                      Vence: {formatearFecha(licencia.fechaVencimiento)}
                                     </p>
                                   </div>
                                   <Button size="sm" variant="ghost" className="h-7 px-2">

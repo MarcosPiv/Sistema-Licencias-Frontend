@@ -19,6 +19,13 @@ import gsap from "gsap"
 // Importar el nuevo hook al principio del archivo
 import { useDeviceSize } from "@/hooks/use-device-size"
 
+// Añadir esta función helper al inicio del componente, después de las importaciones
+const formatearFecha = (fechaString: string) => {
+  // Crear la fecha agregando la zona horaria local para evitar problemas de UTC
+  const fecha = new Date(fechaString + "T00:00:00")
+  return fecha.toLocaleDateString("es-AR")
+}
+
 interface ImprimirLicenciaFormProps {
   role: string
 }
@@ -756,11 +763,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         pdf.setFont("helvetica", "normal")
         pdf.setFontSize(10)
         pdf.text(`RECIBO N° R-${licenciaSeleccionada.numeroLicencia}`, pageWidth - margin - 60, margin + 10)
-        pdf.text(
-          `FECHA: ${new Date(licenciaSeleccionada.fechaEmision).toLocaleDateString("es-ES")}`,
-          pageWidth - margin - 60,
-          margin + 18,
-        )
+        pdf.text(`FECHA: ${formatearFecha(licenciaSeleccionada.fechaEmision)}`, pageWidth - margin - 60, margin + 18)
 
         // Línea separadora
         pdf.setDrawColor(200, 200, 200)
@@ -1206,17 +1209,15 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                             </p>
                             <p className={`mb-1 ${getTextSizeClass("text-sm")}`}>
                               <span className="font-semibold">Fecha de nacimiento:</span>{" "}
-                              {new Date(licenciaSeleccionada?.titular.fechaNacimiento || "").toLocaleDateString(
-                                "es-AR",
-                              )}
+                              {formatearFecha(licenciaSeleccionada?.titular.fechaNacimiento || "")}
                             </p>
                             <p className={`mb-1 ${getTextSizeClass("text-sm")}`}>
                               <span className="font-semibold">Emisión:</span>{" "}
-                              {new Date(licenciaSeleccionada?.fechaEmision || "").toLocaleDateString("es-AR")}
+                              {formatearFecha(licenciaSeleccionada?.fechaEmision || "")}
                             </p>
                             <p className={`mb-1 ${getTextSizeClass("text-sm")}`}>
                               <span className="font-semibold">Vencimiento:</span>{" "}
-                              {new Date(licenciaSeleccionada?.fechaVencimiento || "").toLocaleDateString("es-AR")}
+                              {formatearFecha(licenciaSeleccionada?.fechaVencimiento || "")}
                             </p>
                           </div>
 
@@ -1388,7 +1389,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                               <div className="text-right">
                                 <p className="text-sm dark:text-white">Recibo N° R-{licencia.numeroLicencia}</p>
                                 <p className="text-xs dark:text-slate-500 dark:text-slate-400">
-                                  Emitido: {new Date(licencia.fechaEmision).toLocaleDateString("es-ES")}
+                                  Emitido: {formatearFecha(licencia.fechaEmision)}
                                 </p>
                               </div>
                             </div>
@@ -1424,7 +1425,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                       <div className="text-right">
                         <p className="text-sm dark:text-white">RECIBO N° R-{licenciaSeleccionada.numeroLicencia}</p>
                         <p className="text-xs dark:text-slate-300">
-                          FECHA: {new Date(licenciaSeleccionada.fechaEmision).toLocaleDateString("es-ES")}
+                          FECHA: {formatearFecha(licenciaSeleccionada.fechaEmision)}
                         </p>
                       </div>
                     </div>
