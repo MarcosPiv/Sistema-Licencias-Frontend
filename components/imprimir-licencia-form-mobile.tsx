@@ -138,6 +138,9 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setBusquedaRealizada(true)
     setIsLoading(true)
 
+    // Simular tiempo de carga para mostrar el spinner
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
 
@@ -271,6 +274,9 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setLicenciaSeleccionada(null)
     setBusquedaRealizada(true)
     setIsLoading(true)
+
+    // Simular tiempo de carga para mostrar el spinner
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -904,11 +910,15 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
                     {/* Modificar los botones de búsqueda para mostrar el estado de carga
                     // Buscar el botón de búsqueda en la pestaña de licencia y reemplazarlo con: */}
-                    <Button onClick={buscarLicencia} className="w-full relative" disabled={isLoading}>
+                    <Button
+                      onClick={buscarLicencia}
+                      className="w-full relative bg-blue-600 hover:bg-blue-700"
+                      disabled={isLoading}
+                    >
                       {isLoading ? (
                         <>
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 dark:border-slate-600 dark:border-t-slate-300 rounded-full animate-spin"></div>
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                           </div>
                           <span className="opacity-0">Buscar</span>
                         </>
@@ -1173,7 +1183,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                           <div className="absolute top-[40%] left-[10%] right-[10%] text-black">
                             <div className={`grid grid-cols-2 gap-x-2 gap-y-1 ${getTextSizeClass("text-[11px]")}`}>
                               <div>
-                                <span className="font-semibold">DNI:</span>{" "}
+                                <span className="font-semibold">{licenciaSeleccionada?.titular.tipoDocumento}:</span>{" "}
                                 {licenciaSeleccionada?.titular.numeroDocumento}
                               </div>
                               <div className="text-right">
@@ -1277,11 +1287,15 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
                     {/* Modificar los botones de búsqueda para mostrar el estado de carga
                     // Buscar el botón de búsqueda en la pestaña de comprobante y reemplazarlo con: */}
-                    <Button onClick={buscarLicencia} className="w-full relative" disabled={isLoading}>
+                    <Button
+                      onClick={buscarLicencia}
+                      className="w-full relative bg-blue-600 hover:bg-blue-700"
+                      disabled={isLoading}
+                    >
                       {isLoading ? (
                         <>
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 dark:border-slate-600 dark:border-t-slate-300 rounded-full animate-spin"></div>
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                           </div>
                           <span className="opacity-0">Buscar</span>
                         </>
