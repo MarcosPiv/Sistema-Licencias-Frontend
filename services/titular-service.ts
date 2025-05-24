@@ -42,7 +42,7 @@ export interface TitularStats {
 }
 
 // URL base de la API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.sistema-licencias.gob.ar"
 
 // Función para obtener los headers de autenticación
 // const getAuthHeaders = () => {
@@ -115,182 +115,231 @@ export const titularService = {
     }
   },
 
-// Obtener un titular por tipo y número de documento
-obtenerTitularPorDocumento: async (tipoDocumento: string, numeroDocumento: string): Promise<TitularResponse> => {
-  try {
-    // Convertir el tipo de documento a mayúsculas para la API
-    const tipoDocumentoAPI = tipoDocumento.toUpperCase();
-    
-    console.log(`Buscando titular: ${tipoDocumentoAPI} ${numeroDocumento}`);
+  // Obtener un titular por tipo y número de documento
+  obtenerTitularPorDocumento: async (tipoDocumento: string, numeroDocumento: string): Promise<TitularResponse> => {
+    try {
+      // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/titulares?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
+      console.log(`Buscando titular: ${tipoDocumentoAPI} ${numeroDocumento}`)
+
+      const response = await fetch(
+        `${API_URL}/titulares?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
         },
+      )
+
+      // Capturar el texto de la respuesta primero para poder mostrarlo en caso de error
+      const responseText = await response.text()
+      console.log("Respuesta del servidor:", responseText)
+
+      // Si es 404, significa que el titular no existe (esto es normal al verificar antes de crear)
+      if (response.status === 404) {
+        return {
+          success: false,
+          message: "Titular no encontrado",
+          titular: {} as Titular,
+        }
       }
-    );
 
-    // Capturar el texto de la respuesta primero para poder mostrarlo en caso de error
-    const responseText = await response.text();
-    console.log("Respuesta del servidor:", responseText);
+      if (!response.ok) {
+        // Intentar parsear el error como JSON si es posible
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+        try {
+          if (responseText) {
+            const errorJson = JSON.parse(responseText)
+            errorMessage = errorJson.message || errorJson.error || errorMessage
+          }
+        } catch (parseError) {
+          console.error("No se pudo parsear el error como JSON:", parseError)
+        }
 
-    if (!response.ok) {
-      // Intentar parsear el error como JSON si es posible
-      let errorMessage = `Error ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage)
+      }
+
+      // Parsear la respuesta JSON solo si hay contenido
+      let titularData
       try {
         if (responseText) {
-          const errorJson = JSON.parse(responseText);
-          errorMessage = errorJson.message || errorJson.error || errorMessage;
+          titularData = JSON.parse(responseText)
+        } else {
+          throw new Error("La respuesta del servidor está vacía")
         }
       } catch (parseError) {
-        console.error("No se pudo parsear el error como JSON:", parseError);
+        console.error("Error al parsear la respuesta JSON:", parseError)
+        throw new Error("La respuesta del servidor no es un JSON válido")
       }
 
-      throw new Error(errorMessage);
-    }
-
-    // Parsear la respuesta JSON solo si hay contenido
-    let titularData;
-    try {
-      if (responseText) {
-        titularData = JSON.parse(responseText);
-      } else {
-        throw new Error("La respuesta del servidor está vacía");
+      // Verificar si los datos del titular están presentes
+      if (!titularData || !titularData.id) {
+        return {
+          success: false,
+          message: "No se encontró el titular con los datos proporcionados",
+          titular: {} as Titular,
+        }
       }
-    } catch (parseError) {
-      console.error("Error al parsear la respuesta JSON:", parseError);
-      throw new Error("La respuesta del servidor no es un JSON válido");
+
+      // Transformar la respuesta del backend al formato esperado por el frontend
+      const titular: Titular = {
+        id: titularData.id,
+        tipoDocumento: titularData.tipoDocumento,
+        numeroDocumento: titularData.numeroDocumento,
+        nombreApellido: `${titularData.nombre} ${titularData.apellido}`,
+        fechaNacimiento: titularData.fechaNacimiento,
+        direccion: titularData.direccion,
+        grupoSanguineo: titularData.grupoSanguineo,
+        factorRh: titularData.factorRh === "POSITIVO" ? "+" : "-",
+        donanteOrganos: titularData.donanteOrganos ? "Si" : "No",
+        fechaAlta: titularData.fechaAlta || new Date().toISOString().split("T")[0],
+      }
+
+      return {
+        success: true,
+        message: "Titular encontrado",
+        titular: titular,
+      }
+    } catch (error) {
+      console.error(`Error al obtener titular con documento ${tipoDocumento} ${numeroDocumento}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al buscar titular",
+        titular: {} as Titular,
+      }
     }
+  },
 
-    // Verificar si los datos del titular están presentes
-    if (!titularData || !titularData.id) {
-      throw new Error("No se encontró el titular con los datos proporcionados");
-    }
-
-    // Transformar la respuesta del backend al formato esperado por el frontend
-    const titular: Titular = {
-      id: titularData.id,
-      tipoDocumento: titularData.tipoDocumento,
-      numeroDocumento: titularData.numeroDocumento,
-      nombreApellido: `${titularData.nombre} ${titularData.apellido}`,
-      fechaNacimiento: titularData.fechaNacimiento,
-      direccion: titularData.direccion,
-      grupoSanguineo: titularData.grupoSanguineo,
-      factorRh: titularData.factorRh === "POSITIVO" ? "+" : "-",
-      donanteOrganos: titularData.donanteOrganos ? "Si" : "No",
-      fechaAlta: titularData.fechaAlta || new Date().toISOString().split("T")[0],
-    };
-
-    return {
-      success: true,
-      message: "Titular encontrado",
-      titular: titular,
-    };
-  } catch (error) {
-    console.error(`Error al obtener titular con documento ${tipoDocumento} ${numeroDocumento}:`, error);
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Error desconocido al buscar titular",
-      titular: {} as Titular,
-    };
-  }
-},
-
-// Crear un nuevo titular
+  // Crear un nuevo titular
   crearTitular: async (datos: Omit<Titular, "id" | "fechaAlta">): Promise<TitularResponse> => {
-  try {
-    // Transformar los datos para adaptarlos al formato esperado por el backend
-    const [nombre, apellido] = datos.nombreApellido.split(" ", 2)
-    const apellidoCompleto = datos.nombreApellido.substring(nombre.length + 1)
-    
-    // Procesar el factor Rh para siempre enviar el formato correcto al backend
-    const factorRhMayus = datos.factorRh.toUpperCase();
-    const factorRhValido = 
-      factorRhMayus === "POSITIVO" || 
-      factorRhMayus === "+" || 
-      datos.factorRh === "+" ? 
-      "POSITIVO" : "NEGATIVO";
-    
-    // Procesar donante de órganos para siempre enviar booleano
-    const esDonanteOrganos = 
-      datos.donanteOrganos === "SI" || 
-      datos.donanteOrganos === "si" || 
-      datos.donanteOrganos === "Sí" || 
-      datos.donanteOrganos === "SÍ";
-    
-    // Log para depuración
-    console.log("Datos originales:", { 
-      factorRh: datos.factorRh, 
-      donanteOrganos: datos.donanteOrganos 
-    });
-    console.log("Datos transformados:", { 
-      factorRh: factorRhValido, 
-      donanteOrganos: esDonanteOrganos 
-    });
+    try {
+      // Transformar los datos para adaptarlos al formato esperado por el backend
+      const [nombre, apellido] = datos.nombreApellido.split(" ", 2)
+      const apellidoCompleto = datos.nombreApellido.substring(nombre.length + 1)
 
-    const datosParaEnviar = {
-      nombre: nombre,
-      apellido: apellidoCompleto || apellido,
-      fechaNacimiento: datos.fechaNacimiento,
-      tipoDocumento: datos.tipoDocumento,
-      numeroDocumento: datos.numeroDocumento,
-      grupoSanguineo: datos.grupoSanguineo,
-      factorRh: factorRhValido,
-      direccion: datos.direccion,
-      donanteOrganos: esDonanteOrganos,
+      // Procesar el factor Rh para siempre enviar el formato correcto al backend
+      const factorRhMayus = datos.factorRh.toUpperCase()
+      const factorRhValido =
+        factorRhMayus === "POSITIVO" || factorRhMayus === "+" || datos.factorRh === "+" ? "POSITIVO" : "NEGATIVO"
+
+      // Procesar donante de órganos para siempre enviar booleano
+      const esDonanteOrganos =
+        datos.donanteOrganos === "SI" ||
+        datos.donanteOrganos === "si" ||
+        datos.donanteOrganos === "Sí" ||
+        datos.donanteOrganos === "SÍ"
+
+      // Log para depuración
+      console.log("Datos originales:", {
+        factorRh: datos.factorRh,
+        donanteOrganos: datos.donanteOrganos,
+      })
+      console.log("Datos transformados:", {
+        factorRh: factorRhValido,
+        donanteOrganos: esDonanteOrganos,
+      })
+
+      const datosParaEnviar = {
+        nombre: nombre,
+        apellido: apellidoCompleto || apellido,
+        fechaNacimiento: datos.fechaNacimiento,
+        tipoDocumento: datos.tipoDocumento,
+        numeroDocumento: datos.numeroDocumento,
+        grupoSanguineo: datos.grupoSanguineo,
+        factorRh: factorRhValido,
+        direccion: datos.direccion,
+        donanteOrganos: esDonanteOrganos,
+      }
+
+      console.log("Enviando al backend:", JSON.stringify(datosParaEnviar))
+
+      const response = await fetch(`${API_URL}/titulares`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(datosParaEnviar),
+      })
+
+      // Capturar la respuesta como texto primero
+      const responseText = await response.text()
+      console.log("Respuesta del backend:", responseText)
+
+      if (!response.ok) {
+        // Intentar parsear el error del backend
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+
+        try {
+          if (responseText) {
+            const errorJson = JSON.parse(responseText)
+            // Usar directamente el mensaje del backend
+            errorMessage = errorJson.message || errorJson.error || errorMessage
+          }
+        } catch (parseError) {
+          console.error("No se pudo parsear el error como JSON:", parseError)
+          // Si no se puede parsear, usar el texto de respuesta directamente
+          errorMessage = responseText || errorMessage
+        }
+
+        console.error("Error del backend:", errorMessage)
+
+        return {
+          success: false,
+          message: errorMessage, // Retornar directamente el mensaje del backend
+          titular: {} as Titular,
+        }
+      }
+
+      // Parsear la respuesta exitosa
+      let responseData
+      try {
+        if (responseText) {
+          responseData = JSON.parse(responseText)
+        } else {
+          throw new Error("La respuesta del servidor está vacía")
+        }
+      } catch (parseError) {
+        console.error("Error al parsear la respuesta JSON:", parseError)
+        return {
+          success: false,
+          message: "Error al procesar la respuesta del servidor",
+          titular: {} as Titular,
+        }
+      }
+
+      console.log("Titular creado exitosamente:", responseData)
+
+      // Transformar la respuesta del backend al formato esperado por el frontend
+      const titularCreado: Titular = {
+        id: responseData.id,
+        tipoDocumento: responseData.tipoDocumento,
+        numeroDocumento: responseData.numeroDocumento,
+        nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
+        fechaNacimiento: responseData.fechaNacimiento,
+        direccion: responseData.direccion,
+        grupoSanguineo: responseData.grupoSanguineo,
+        factorRh: responseData.factorRh === "POSITIVO" ? "positivo" : "negativo",
+        donanteOrganos: responseData.donanteOrganos ? "si" : "no",
+        fechaAlta: new Date().toISOString().split("T")[0],
+      }
+
+      return {
+        success: true,
+        message: "Titular creado correctamente",
+        titular: titularCreado,
+      }
+    } catch (error) {
+      console.error("Error al crear titular:", error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al crear titular",
+        titular: {} as Titular,
+      }
     }
-    
-    console.log("Enviando al backend:", JSON.stringify(datosParaEnviar));
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/titulares`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(datosParaEnviar),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Error del servidor:", errorText);
-      throw new Error(`Error ${response.status}: ${response.statusText || errorText}`);
-    }
-
-    const responseData = await response.json()
-    console.log("Respuesta del backend:", responseData);
-
-    // Transformar la respuesta del backend al formato esperado por el frontend
-    const titularCreado: Titular = {
-      id: responseData.id,
-      tipoDocumento: responseData.tipoDocumento,
-      numeroDocumento: responseData.numeroDocumento,
-      nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
-      fechaNacimiento: responseData.fechaNacimiento,
-      direccion: responseData.direccion,
-      grupoSanguineo: responseData.grupoSanguineo,
-      factorRh: responseData.factorRh === "POSITIVO" ? "positivo" : "negativo",
-      donanteOrganos: responseData.donanteOrganos ? "si" : "no",
-      fechaAlta: new Date().toISOString().split("T")[0],
-    }
-
-    return {
-      success: true,
-      message: "Titular creado correctamente",
-      titular: titularCreado,
-    }
-  } catch (error) {
-    console.error("Error al crear titular:", error)
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Error desconocido al crear titular",
-      titular: {} as Titular,
-    }
-  }
-},
+  },
 
   // Actualizar un titular existente
   actualizarTitular: async (

@@ -20,6 +20,7 @@ import gsap from "gsap"
 // Importar el nuevo hook al principio del archivo
 import { useDeviceSize } from "@/hooks/use-device-size"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
 // Añadir esta función helper al inicio del componente, después de las importaciones
 const formatearFecha = (fechaString: string) => {
   // Crear la fecha agregando la zona horaria local para evitar problemas de UTC
@@ -178,7 +179,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
       // Realizar la petición al API con el tipo de documento en mayúsculas
       const response = await fetch(
-        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
+        `${API_URL}/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
       )
 
       console.log("Respuesta del API (mobile):", response.status)
@@ -354,7 +355,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
 
       // Realizar la petición al API
       const response = await fetch(
-        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+        `${API_URL}/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
       )
 
       console.log("Respuesta del API (mobile):", response.status)

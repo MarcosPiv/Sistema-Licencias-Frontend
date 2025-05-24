@@ -54,6 +54,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
   // Añadir después de la declaración de los otros estados:
   const [isLoading, setIsLoading] = useState(false)
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
   // Función de utilidad para animar elementos con error
   const animateErrorField = (element: HTMLElement | null) => {
     if (!element) return
@@ -180,7 +181,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
 
       // Realizar la petición al API con el tipo de documento en mayúsculas
       const response = await fetch(
-        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
+        `${API_URL}/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
       )
 
       console.log("Respuesta del API:", response.status)
@@ -358,7 +359,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
 
       // Realizar la petición al API con el tipo de documento en mayúsculas
       const response = await fetch(
-        `http://localhost:8080/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+        `${API_URL}/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
       )
 
       console.log("Respuesta del API:", response.status)

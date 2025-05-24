@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { CheckCircle2, ArrowLeft } from "lucide-react"
+import { CheckCircle2, ArrowLeft, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -69,6 +69,7 @@ export default function TitularForm({ role }: TitularFormProps) {
   const { incrementTitularesRegistrados } = useStats()
   const [success, setSuccess] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [errorBackend, setErrorBackend] = useState<string | null>(null)
   const formFieldsRef = useRef<HTMLDivElement>(null)
   const buttonsRef = useRef<HTMLDivElement>(null)
   const [tipoDocumento, setTipoDocumento] = useState<string>("")
@@ -106,6 +107,12 @@ export default function TitularForm({ role }: TitularFormProps) {
         // Limpiar el campo de número de documento al cambiar el tipo
         form.setValue("numeroDocumento", "")
         form.clearErrors("numeroDocumento")
+        // Limpiar mensaje de error del backend
+        setErrorBackend(null)
+      }
+      if (name === "numeroDocumento") {
+        // Limpiar mensaje de error del backend al cambiar el número
+        setErrorBackend(null)
       }
     })
 
@@ -151,7 +158,10 @@ export default function TitularForm({ role }: TitularFormProps) {
       return
     }
 
+    // Limpiar mensajes previos
+    setErrorBackend(null)
     setGuardando(true)
+
     try {
       // Verificar si ya existe un titular con ese documento
       const existeResponse = await titularService.obtenerTitularPorDocumento(
@@ -159,18 +169,38 @@ export default function TitularForm({ role }: TitularFormProps) {
         values.numeroDocumento,
       )
 
-      // Modificar esta condición para verificar correctamente si existe el titular
+      // Si success es true Y tiene un titular con ID, entonces ya existe
       if (existeResponse.success && existeResponse.titular && existeResponse.titular.id) {
+        const mensajeDuplicado = `Ya existe un titular registrado con el documento ${values.tipoDocumento} N° ${values.numeroDocumento}`
+        setErrorBackend(mensajeDuplicado)
         toast({
-          title: "Error",
-          description: "Ya existe un titular con ese documento",
+          title: "Documento duplicado",
+          description: mensajeDuplicado,
           variant: "destructive",
         })
         setGuardando(false)
         return
       }
 
-     // Crear el nuevo titular
+      // Si hubo un error de conexión real (no un 404), mostrar error
+      if (
+        !existeResponse.success &&
+        existeResponse.message.includes("Error") &&
+        !existeResponse.message.includes("no encontrado")
+      ) {
+        setErrorBackend("No se pudo verificar si el titular existe. Intente nuevamente.")
+        toast({
+          title: "Error de conexión",
+          description: "No se pudo verificar si el titular existe. Intente nuevamente.",
+          variant: "destructive",
+        })
+        setGuardando(false)
+        return
+      }
+
+      // Si llegamos aquí, el titular no existe, proceder a crearlo
+      console.log("Titular no existe, procediendo a crear...")
+
       const response = await titularService.crearTitular({
         tipoDocumento: values.tipoDocumento,
         numeroDocumento: values.numeroDocumento,
@@ -181,11 +211,14 @@ export default function TitularForm({ role }: TitularFormProps) {
         factorRh: values.factorRh,
         donanteOrganos: values.donanteOrganos,
       })
+
       if (response.success) {
+        console.log("Titular creado exitosamente:", response.titular)
+
         // Incrementar el contador de titulares registrados
         incrementTitularesRegistrados()
 
-        // Simulación de éxito
+        // Mostrar éxito
         setSuccess(true)
         toast({
           title: "Éxito",
@@ -197,17 +230,24 @@ export default function TitularForm({ role }: TitularFormProps) {
           router.push(`/dashboard?role=${role}`)
         }, 2000)
       } else {
+        console.error("Error al crear titular:", response.message)
+
+        // Mostrar el error exacto del backend
+        setErrorBackend(response.message)
+
         toast({
           title: "Error",
-          description: response.message || "Ocurrió un error al registrar el titular",
+          description: response.message,
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Error al registrar titular:", error)
+      const errorMessage = "Ocurrió un error al registrar el titular"
+      setErrorBackend(errorMessage)
       toast({
         title: "Error",
-        description: "Ocurrió un error al registrar el titular",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -226,214 +266,235 @@ export default function TitularForm({ role }: TitularFormProps) {
             </AlertDescription>
           </Alert>
         ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div ref={formFieldsRef} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="tipoDocumento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Documento *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="DNI">DNI</SelectItem>
-                            <SelectItem value="Pasaporte">Pasaporte</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="numeroDocumento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Número de Documento *</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder={tipoDocumento === "DNI" ? "Ingrese solo números" : "Ingrese números y letras"}
-                            maxLength={tipoDocumento === "DNI" ? 8 : 9}
-                            {...field}
-                            onChange={(e) => {
-                              let value = e.target.value
-
-                              // Si es DNI, filtrar caracteres no numéricos
-                              if (tipoDocumento === "DNI") {
-                                value = value.replace(/\D/g, "")
-                              }
-
-                              // Si es pasaporte, convertir a mayúsculas
-                              if (tipoDocumento === "Pasaporte") {
-                                value = value.toUpperCase()
-                              }
-
-                              // Actualizar el campo con el valor procesado
-                              e.target.value = value
-                              field.onChange(e)
-
-                              // Validar después de cambiar
-                              validateNumeroDocumento(value)
-                            }}
-                            onBlur={(e) => {
-                              field.onBlur()
-                              validateNumeroDocumento(e.target.value)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="nombreApellido"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre y Apellido *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nombre y apellido completos" maxLength={50} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="fechaNacimiento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fecha de Nacimiento *</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="direccion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Dirección *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Dirección completa" maxLength={100} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="grupoSanguineo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Grupo Sanguíneo *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="O">0</SelectItem> 
-                            <SelectItem value="A">A</SelectItem>
-                            <SelectItem value="B">B</SelectItem>
-                            <SelectItem value="AB">AB</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="factorRh"
-                    render={({ field }) => (
-                      <FormItem className="space-y-3">
-                        <FormLabel>Factor RH *</FormLabel>
-                        <FormControl>
-                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-6">
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="+" id="rh-positivo" />
-                              <Label htmlFor="rh-positivo">Positivo (+)</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="-" id="rh-negativo" />
-                              <Label htmlFor="rh-negativo">Negativo (-)</Label>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="donanteOrganos"
-                    render={({ field }) => (
-                      <FormItem className="space-y-3">
-                        <FormLabel>Donante de Órganos *</FormLabel>
-                        <FormControl>
-                          <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-6">
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="SI" id="donante-si" />
-                              <Label htmlFor="donante-si">Sí</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="NO" id="donante-no" />
-                              <Label htmlFor="donante-no">No</Label>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+          <>
+            {errorBackend && (
+              <div className="mb-4 p-4 rounded-lg border-2 border-red-500 bg-slate-900 dark:bg-slate-950">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                  <span className="text-red-500 text-sm font-medium">{errorBackend}</span>
                 </div>
               </div>
+            )}
 
-              <div ref={buttonsRef} className="flex justify-end gap-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push(`/dashboard?role=${role}`)}
-                  className="transition-transform duration-300 hover:scale-105"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Volver
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={guardando}
-                  className="transition-transform duration-300 hover:scale-105"
-                >
-                  {guardando ? "Guardando..." : "Guardar Titular"}
-                </Button>
-              </div>
-            </form>
-          </Form>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div ref={formFieldsRef} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="tipoDocumento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Documento *</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="DNI">DNI</SelectItem>
+                              <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="numeroDocumento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Documento *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={
+                                tipoDocumento === "DNI" ? "Ingrese solo números" : "Ingrese números y letras"
+                              }
+                              maxLength={tipoDocumento === "DNI" ? 8 : 9}
+                              {...field}
+                              onChange={(e) => {
+                                let value = e.target.value
+
+                                // Si es DNI, filtrar caracteres no numéricos
+                                if (tipoDocumento === "DNI") {
+                                  value = value.replace(/\D/g, "")
+                                }
+
+                                // Si es pasaporte, convertir a mayúsculas
+                                if (tipoDocumento === "Pasaporte") {
+                                  value = value.toUpperCase()
+                                }
+
+                                // Actualizar el campo con el valor procesado
+                                e.target.value = value
+                                field.onChange(e)
+
+                                // Validar después de cambiar
+                                validateNumeroDocumento(value)
+                              }}
+                              onBlur={(e) => {
+                                field.onBlur()
+                                validateNumeroDocumento(e.target.value)
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="nombreApellido"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre y Apellido *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nombre y apellido completos" maxLength={50} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="fechaNacimiento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fecha de Nacimiento *</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="direccion"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Dirección *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Dirección completa" maxLength={100} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="grupoSanguineo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Grupo Sanguíneo *</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="A">A</SelectItem>
+                              <SelectItem value="B">B</SelectItem>
+                              <SelectItem value="AB">AB</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="factorRh"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Factor RH *</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex gap-6"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="+" id="rh-positivo" />
+                                <Label htmlFor="rh-positivo">Positivo (+)</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="-" id="rh-negativo" />
+                                <Label htmlFor="rh-negativo">Negativo (-)</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="donanteOrganos"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Donante de Órganos *</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex gap-6"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="Si" id="donante-si" />
+                                <Label htmlFor="donante-si">Sí</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="No" id="donante-no" />
+                                <Label htmlFor="donante-no">No</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div ref={buttonsRef} className="flex justify-end gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push(`/dashboard?role=${role}`)}
+                    className="transition-transform duration-300 hover:scale-105"
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Volver
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={guardando}
+                    className="transition-transform duration-300 hover:scale-105"
+                  >
+                    {guardando ? "Guardando..." : "Guardar Titular"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </>
         )}
       </CardContent>
     </Card>

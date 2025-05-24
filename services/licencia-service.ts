@@ -42,6 +42,8 @@ export interface EmitirLicenciaRequest {
   motivoCopia?: string | null
   emisor?: string
 }
+// URL base de la API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
 
 // URL base de la API
 // const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
@@ -130,7 +132,7 @@ export const licenciaService = {
 
       console.log("Datos a enviar al backend:", datosParaEnviar)
 
-      const response = await fetch("http://localhost:8080/api/licencias", {
+      const response = await fetch(`${API_URL}/licencias`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -304,7 +306,7 @@ export const licenciaService = {
   // Obtener licencias vencidas
   obtenerLicenciasVencidas: async (): Promise<LicenciasResponse> => {
     try {
-      const response = await fetch("http://localhost:8080/api/licencias/vencidas", {
+      const response = await fetch(`${API_URL}/licencias/vencidas`, {
         method: "GET",
         headers: {
           accept: "application/json",
