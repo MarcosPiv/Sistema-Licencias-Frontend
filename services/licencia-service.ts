@@ -42,104 +42,171 @@ export interface EmitirLicenciaRequest {
   motivoCopia?: string | null
   emisor?: string
 }
-// URL base de la API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
 
 // URL base de la API
-// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
 
 // Función para obtener los headers de autenticación
-// const getAuthHeaders = () => {
-//   const token = localStorage.getItem('auth_token');
-//   return {
-//     'Content-Type': 'application/json',
-//     'Authorization': `Bearer ${token}`
-//   };
-// };
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("auth_token")
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  } as Record<string, string>
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  return headers
+}
+
+// Función para manejar errores de autenticación
+const handleAuthError = (response: Response) => {
+  if (response.status === 401 || response.status === 403) {
+    // Token expirado o no válido
+    localStorage.removeItem("auth_token")
+    window.location.href = "/login"
+    return true
+  }
+  return false
+}
+
+// Función para obtener el usuario actual del token
+const getCurrentUserFromToken = () => {
+  try {
+    const token = localStorage.getItem("auth_token")
+    if (!token) return null
+
+    const payload = JSON.parse(atob(token.split(".")[1]))
+    return {
+      mail: payload.sub || "",
+      rol: payload.roles && payload.roles.length > 0 ? payload.roles[0] : "OPERADOR",
+    }
+  } catch (error) {
+    console.error("Error al obtener usuario del token:", error)
+    return null
+  }
+}
 
 // Servicio para la gestión de licencias
 export const licenciaService = {
   // Listar todas las licencias
   listarLicencias: async (filtros?: any): Promise<LicenciasResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const queryParams = new URLSearchParams();
-    //   if (filtros) {
-    //     Object.entries(filtros).forEach(([key, value]) => {
-    //       if (value) queryParams.append(key, value as string);
-    //     });
-    //   }
-    //
-    //   const response = await fetch(`${API_URL}/licencias?${queryParams.toString()}`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error('Error al listar licencias:', error);
-    //   throw error;
-    // }
+    try {
+      const queryParams = new URLSearchParams()
+      if (filtros) {
+        Object.entries(filtros).forEach(([key, value]) => {
+          if (value) queryParams.append(key, value as string)
+        })
+      }
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      licencias: [],
-      total: 0,
+      const response = await fetch(`${API_URL}/licencias?${queryParams.toString()}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+          licencias: [],
+          total: 0,
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error("Error al listar licencias:", error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al listar licencias",
+        licencias: [],
+        total: 0,
+      }
     }
   },
 
   // Obtener una licencia por ID
   obtenerLicencia: async (id: number): Promise<LicenciaResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/licencias/${id}`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al obtener licencia con ID ${id}:`, error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/licencias/${id}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al obtener licencia con ID ${id}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al obtener licencia",
+      }
     }
   },
 
   // Emitir una nueva licencia
   emitirLicencia: async (datos: EmitirLicenciaRequest): Promise<LicenciaResponse> => {
     try {
-      // Preparar los datos para el backend
+      // Verificar autenticación
+      const token = localStorage.getItem("auth_token")
+      if (!token) {
+        return {
+          success: false,
+          message: "Debe iniciar sesión para emitir licencias",
+        }
+      }
+
+      // Obtener el usuario actual del token
+      const usuarioActual = getCurrentUserFromToken()
+      if (!usuarioActual) {
+        return {
+          success: false,
+          message: "No se pudo obtener información del usuario. Inicie sesión nuevamente.",
+        }
+      }
+
+      // Preparar los datos para el backend usando el email del usuario autenticado
       const datosParaEnviar = {
         titularId: Number.parseInt(datos.titularId.toString()),
         clase: datos.clase,
         numeroCopia: datos.numeroCopia || null,
         motivoCopia: datos.motivoCopia || null,
-        emisor: datos.emisor || "admin",
+        emisor: usuarioActual.mail, // Usar el email del usuario autenticado
       }
 
+      console.log("Usuario autenticado:", usuarioActual)
       console.log("Datos a enviar al backend:", datosParaEnviar)
 
       const response = await fetch(`${API_URL}/licencias`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          accept: "*/*",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(datosParaEnviar),
       })
+
+      // Manejar errores de autenticación
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
 
       // Intentar obtener el texto de la respuesta
       const responseText = await response.text()
@@ -227,79 +294,206 @@ export const licenciaService = {
 
   // Renovar una licencia existente
   renovarLicencia: async (licenciaId: number, datos: Partial<EmitirLicenciaRequest>): Promise<LicenciaResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/licencias/${licenciaId}/renovar`, {
-    //     method: 'POST',
-    //     headers: getAuthHeaders(),
-    //     body: JSON.stringify(datos)
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al renovar licencia con ID ${licenciaId}:`, error);
-    //   throw error;
-    // }
+    try {
+      // Verificar autenticación
+      const token = localStorage.getItem("auth_token")
+      if (!token) {
+        return {
+          success: false,
+          message: "Debe iniciar sesión para renovar licencias",
+        }
+      }
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
+      // Obtener el usuario actual del token
+      const usuarioActual = getCurrentUserFromToken()
+      if (!usuarioActual) {
+        return {
+          success: false,
+          message: "No se pudo obtener información del usuario. Inicie sesión nuevamente.",
+        }
+      }
+
+      // Agregar el emisor a los datos
+      const datosConEmisor = {
+        ...datos,
+        emisor: usuarioActual.mail,
+      }
+
+      const response = await fetch(`${API_URL}/licencias/${licenciaId}/renovar`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(datosConEmisor),
+      })
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch (e) {
+          if (errorText.trim()) {
+            errorMessage = errorText
+          }
+        }
+
+        return {
+          success: false,
+          message: errorMessage,
+        }
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al renovar licencia con ID ${licenciaId}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al renovar licencia",
+      }
     }
   },
 
   // Emitir copia de una licencia
   emitirCopia: async (licenciaId: number, motivo: string): Promise<LicenciaResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/licencias/${licenciaId}/copia`, {
-    //     method: 'POST',
-    //     headers: getAuthHeaders(),
-    //     body: JSON.stringify({ motivo })
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al emitir copia de licencia con ID ${licenciaId}:`, error);
-    //   throw error;
-    // }
+    try {
+      // Verificar autenticación
+      const token = localStorage.getItem("auth_token")
+      if (!token) {
+        return {
+          success: false,
+          message: "Debe iniciar sesión para emitir copias",
+        }
+      }
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
+      // Obtener el usuario actual del token
+      const usuarioActual = getCurrentUserFromToken()
+      if (!usuarioActual) {
+        return {
+          success: false,
+          message: "No se pudo obtener información del usuario. Inicie sesión nuevamente.",
+        }
+      }
+
+      const datosConEmisor = {
+        motivo,
+        emisor: usuarioActual.mail,
+      }
+
+      const response = await fetch(`${API_URL}/licencias/${licenciaId}/copia`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(datosConEmisor),
+      })
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch (e) {
+          if (errorText.trim()) {
+            errorMessage = errorText
+          }
+        }
+
+        return {
+          success: false,
+          message: errorMessage,
+        }
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al emitir copia de licencia con ID ${licenciaId}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al emitir copia",
+      }
     }
   },
 
   // Anular una licencia
   anularLicencia: async (id: number, motivo: string): Promise<{ success: boolean; message: string }> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/licencias/${id}/anular`, {
-    //     method: 'POST',
-    //     headers: getAuthHeaders(),
-    //     body: JSON.stringify({ motivo })
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al anular licencia con ID ${id}:`, error);
-    //   throw error;
-    // }
+    try {
+      // Verificar autenticación
+      const token = localStorage.getItem("auth_token")
+      if (!token) {
+        return {
+          success: false,
+          message: "Debe iniciar sesión para anular licencias",
+        }
+      }
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
+      // Obtener el usuario actual del token
+      const usuarioActual = getCurrentUserFromToken()
+      if (!usuarioActual) {
+        return {
+          success: false,
+          message: "No se pudo obtener información del usuario. Inicie sesión nuevamente.",
+        }
+      }
+
+      const datosConEmisor = {
+        motivo,
+        emisor: usuarioActual.mail,
+      }
+
+      const response = await fetch(`${API_URL}/licencias/${id}/anular`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(datosConEmisor),
+      })
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch (e) {
+          if (errorText.trim()) {
+            errorMessage = errorText
+          }
+        }
+
+        return {
+          success: false,
+          message: errorMessage,
+        }
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al anular licencia con ID ${id}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al anular licencia",
+      }
     }
   },
 
@@ -308,10 +502,17 @@ export const licenciaService = {
     try {
       const response = await fetch(`${API_URL}/licencias/vencidas`, {
         method: "GET",
-        headers: {
-          accept: "application/json",
-        },
+        headers: getAuthHeaders(),
       })
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+          licencias: [],
+          total: 0,
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
@@ -367,6 +568,111 @@ export const licenciaService = {
         message: error instanceof Error ? error.message : "Error desconocido al obtener licencias vencidas",
         licencias: [],
         total: 0,
+      }
+    }
+  },
+
+  // Buscar licencias por titular (para imprimir)
+  buscarLicenciasPorTitular: async (
+    tipoDocumento: string,
+    numeroDocumento: string,
+  ): Promise<{
+    success: boolean
+    message: string
+    licencias?: Licencia[]
+    titular?: any
+  }> => {
+    try {
+      // Verificar autenticación
+      const token = localStorage.getItem("auth_token")
+      if (!token) {
+        return {
+          success: false,
+          message: "Debe iniciar sesión para buscar licencias",
+        }
+      }
+
+      // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+
+      const response = await fetch(
+        `${API_URL}/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
+        {
+          method: "GET",
+          headers: getAuthHeaders(),
+        },
+      )
+
+      if (handleAuthError(response)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Redirigiendo al login...",
+        }
+      }
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            success: false,
+            message: "No se encontraron licencias con ese documento",
+          }
+        }
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // Verificar si hay licencias
+      if (!data.licencias || data.licencias.length === 0) {
+        return {
+          success: false,
+          message: "No se encontraron licencias con ese documento",
+        }
+      }
+
+      // Mapear los datos recibidos al formato que espera el componente
+      const licenciasFormateadas: Licencia[] = data.licencias.map((licencia: any) => ({
+        id: licencia.id,
+        numeroLicencia: licencia.id.toString(),
+        titular: {
+          id: data.titular.id,
+          tipoDocumento: data.titular.tipoDocumento,
+          numeroDocumento: data.titular.numeroDocumento,
+          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
+          fechaNacimiento: data.titular.fechaNacimiento,
+          direccion: data.titular.direccion,
+          grupoSanguineo: data.titular.grupoSanguineo,
+          factorRh: data.titular.factorRh,
+          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: licencia.clase,
+        fechaEmision: licencia.fechaEmision,
+        fechaVencimiento: licencia.fechaVencimiento,
+        vigencia: licencia.vigenciaAnios,
+        costo: licencia.costo,
+        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
+      }))
+
+      return {
+        success: true,
+        message: "Licencias encontradas correctamente",
+        licencias: licenciasFormateadas,
+        titular: data.titular,
+      }
+    } catch (error) {
+      console.error("Error al buscar licencias por titular:", error)
+
+      // Manejar errores de red
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        return {
+          success: false,
+          message: "Error de conexión. Verifique su conexión a internet e intente nuevamente.",
+        }
+      }
+
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al buscar licencias",
       }
     }
   },

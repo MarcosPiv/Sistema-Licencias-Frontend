@@ -13,9 +13,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import gsap from "gsap"
 import Image from "next/image"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { authService } from "@/services/auth-service"
+import { useToast } from "@/hooks/use-toast"
 
 export default function LoginForm() {
   const router = useRouter()
+  const { toast } = useToast()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -251,10 +254,30 @@ export default function LoginForm() {
       },
     })
 
-    // Simulación de login - En producción, esto se conectaría con el backend
     try {
-      // Simulación de verificación
-      if (email === "admin@municipio.gob" && password === "admin") {
+      console.log("Intentando login con:", { email, password: "***" })
+
+      // Llamar al servicio de autenticación real
+      const response = await authService.login({
+        mail: email,
+        password: password,
+      })
+
+      console.log("Respuesta del login:", response)
+
+      if (response.success && response.token) {
+        // Obtener el rol del usuario
+        const userRole = authService.getUserRole()
+        console.log("Rol del usuario:", userRole)
+
+        // Mapear roles del backend a roles del frontend
+        let frontendRole = "OPERADOR"
+        if (userRole === "SUPER_USER") {
+          frontendRole = "ADMIN"
+        } else if (userRole === "OPERADOR") {
+          frontendRole = "OPERADOR"
+        }
+
         // Animación de éxito
         gsap.to(formRef.current, {
           boxShadow: "0 0 15px rgba(34, 197, 94, 0.6)",
@@ -268,28 +291,15 @@ export default function LoginForm() {
               opacity: 0,
               duration: 0.5,
               onComplete: () => {
-                // Simular rol de administrador
-                router.push("/dashboard?role=ADMIN")
-              },
-            })
-          },
-        })
-      } else if (email === "operador@municipio.gob" && password === "operador") {
-        // Animación de éxito
-        gsap.to(formRef.current, {
-          boxShadow: "0 0 15px rgba(34, 197, 94, 0.6)",
-          duration: 0.3,
-          yoyo: true,
-          repeat: 1,
-          onComplete: () => {
-            // Animación de salida antes de navegar
-            gsap.to(formRef.current, {
-              y: -30,
-              opacity: 0,
-              duration: 0.5,
-              onComplete: () => {
-                // Simular rol de operador
-                router.push("/dashboard?role=OPERADOR")
+                // Mostrar toast de éxito
+                toast({
+                  title: "Inicio de sesión exitoso",
+                  description: `Bienvenido al sistema`,
+                  variant: "default",
+                })
+
+                // Navegar al dashboard con el rol correcto
+                router.push(`/dashboard?role=${frontendRole}`)
               },
             })
           },
@@ -299,11 +309,14 @@ export default function LoginForm() {
         const newAttempts = loginAttempts + 1
         setLoginAttempts(newAttempts)
 
+        // Usar el mensaje de error del backend
+        const errorMessage = response.message || "Credenciales inválidas. Por favor, intente nuevamente."
+
         // Mensaje de error personalizado según el número de intentos
         if (newAttempts >= 3) {
           setError("Múltiples intentos fallidos. ¿Olvidaste tu contraseña?")
         } else {
-          setError("Credenciales inválidas. Por favor, intente nuevamente.")
+          setError(errorMessage)
         }
 
         // Animación de error
@@ -318,10 +331,27 @@ export default function LoginForm() {
           }
         }
 
-        setLoading(false)
+        // Toast de error
+        toast({
+          title: "Error de autenticación",
+          description: errorMessage,
+          variant: "destructive",
+        })
       }
     } catch (err) {
-      setError("Error al iniciar sesión. Por favor, intente nuevamente.")
+      console.error("Error durante el login:", err)
+      setError("Error al conectar con el servidor. Por favor, intente nuevamente.")
+
+      // Toast de error de conexión
+      toast({
+        title: "Error de conexión",
+        description: "No se pudo conectar con el servidor",
+        variant: "destructive",
+      })
+
+      // Animación de error
+      gsap.fromTo(formRef.current, { x: -10 }, { x: 10, duration: 0.1, repeat: 5, yoyo: true })
+    } finally {
       setLoading(false)
     }
   }
@@ -350,22 +380,24 @@ export default function LoginForm() {
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <Alert variant="destructive" className="animate-in fade-in-50 duration-300">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-              {loginAttempts >= 3 && (
-                <Button
-                  variant="link"
-                  className="p-0 h-auto text-xs text-destructive underline ml-2"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setShowRecoveryInfo(!showRecoveryInfo)
-                  }}
-                >
-                  Recuperar acceso
-                </Button>
-              )}
-            </Alert>
+            <div className="bg-slate-900 dark:bg-slate-950 border-2 border-red-500 rounded-lg p-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-red-500 text-sm font-medium">{error}</p>
+                {loginAttempts >= 3 && (
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-xs text-red-400 underline mt-1"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setShowRecoveryInfo(!showRecoveryInfo)
+                    }}
+                  >
+                    Recuperar acceso
+                  </Button>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Información de recuperación de contraseña */}
@@ -463,8 +495,8 @@ export default function LoginForm() {
 
           <div className="text-sm text-center text-slate-500 mt-4">
             <p>Para fines de demostración:</p>
-            <p>Admin: admin@municipio.gob / admin</p>
-            <p>Operador: operador@municipio.gob / operador</p>
+            <p>Admin: admin@municipio.gob / admin123</p>
+            <p>Operador: operador@municipio.gob / operador123</p>
           </div>
 
           <div className="mt-8 pt-4 border-t dark:border-slate-700" ref={teamSectionRef}>

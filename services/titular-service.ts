@@ -45,73 +45,105 @@ export interface TitularStats {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.sistema-licencias.gob.ar"
 
 // Función para obtener los headers de autenticación
-// const getAuthHeaders = () => {
-//   const token = localStorage.getItem('auth_token');
-//   return {
-//     'Content-Type': 'application/json',
-//     'Authorization': `Bearer ${token}`
-//   };
-// };
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("auth_token")
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  }
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
+  return headers
+}
+
+// Función para manejar errores de autenticación
+const handleAuthError = (status: number) => {
+  if (status === 401 || status === 403) {
+    // Token expirado o no válido
+    localStorage.removeItem("auth_token")
+    localStorage.removeItem("user_data")
+    // Redirigir al login
+    window.location.href = "/"
+    return true
+  }
+  return false
+}
 
 // Servicio para la gestión de titulares
 export const titularService = {
   // Listar todos los titulares
   listarTitulares: async (filtros?: any): Promise<TitularesResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const queryParams = new URLSearchParams();
-    //   if (filtros) {
-    //     Object.entries(filtros).forEach(([key, value]) => {
-    //       if (value) queryParams.append(key, value as string);
-    //     });
-    //   }
-    //
-    //   const response = await fetch(`${API_URL}/titulares?${queryParams.toString()}`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error('Error al listar titulares:', error);
-    //   throw error;
-    // }
+    try {
+      const queryParams = new URLSearchParams()
+      if (filtros) {
+        Object.entries(filtros).forEach(([key, value]) => {
+          if (value) queryParams.append(key, value as string)
+        })
+      }
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      titulares: [],
-      total: 0,
+      const response = await fetch(`${API_URL}/titulares?${queryParams.toString()}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
+
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+          titulares: [],
+          total: 0,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Error al listar titulares:", error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al listar titulares",
+        titulares: [],
+        total: 0,
+      }
     }
   },
 
   // Obtener un titular por ID
   obtenerTitular: async (id: number): Promise<TitularResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/titulares/${id}`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al obtener titular con ID ${id}:`, error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/titulares/${id}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      titular: {} as Titular,
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+          titular: {} as Titular,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al obtener titular con ID ${id}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al obtener titular",
+        titular: {} as Titular,
+      }
     }
   },
 
@@ -127,12 +159,18 @@ export const titularService = {
         `${API_URL}/titulares?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
         {
           method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
+          headers: getAuthHeaders(),
         },
       )
+
+      // Manejar errores de autenticación
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+          titular: {} as Titular,
+        }
+      }
 
       // Capturar el texto de la respuesta primero para poder mostrarlo en caso de error
       const responseText = await response.text()
@@ -215,6 +253,15 @@ export const titularService = {
 
   // Crear un nuevo titular
   crearTitular: async (datos: Omit<Titular, "id" | "fechaAlta">): Promise<TitularResponse> => {
+    const token = localStorage.getItem("auth_token")
+    if (!token) {
+      return {
+        success: false,
+        message: "Debe iniciar sesión para crear un titular",
+        titular: {} as Titular,
+      }
+    }
+
     try {
       // Transformar los datos para adaptarlos al formato esperado por el backend
       const [nombre, apellido] = datos.nombreApellido.split(" ", 2)
@@ -225,12 +272,14 @@ export const titularService = {
       const factorRhValido =
         factorRhMayus === "POSITIVO" || factorRhMayus === "+" || datos.factorRh === "+" ? "POSITIVO" : "NEGATIVO"
 
-      // Procesar donante de órganos para siempre enviar booleano
+      // Procesar donante de órganos - CORREGIDO
       const esDonanteOrganos =
+        datos.donanteOrganos === "Si" ||
         datos.donanteOrganos === "SI" ||
         datos.donanteOrganos === "si" ||
         datos.donanteOrganos === "Sí" ||
-        datos.donanteOrganos === "SÍ"
+        datos.donanteOrganos === "SÍ" ||
+        datos.donanteOrganos === "sí"
 
       // Log para depuración
       console.log("Datos originales:", {
@@ -255,14 +304,61 @@ export const titularService = {
       }
 
       console.log("Enviando al backend:", JSON.stringify(datosParaEnviar))
+      console.log("Headers de autenticación:", getAuthHeaders())
 
       const response = await fetch(`${API_URL}/titulares`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(datosParaEnviar),
       })
+
+      // NUEVO: Logging detallado para debug
+      console.log("=== DEBUG CREAR TITULAR ===")
+      console.log("Status de respuesta:", response.status)
+      console.log("Status text:", response.statusText)
+      console.log("Headers de respuesta:", Object.fromEntries(response.headers.entries()))
+
+      // Verificar el token antes de procesar la respuesta
+      console.log("Token presente:", !!token)
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]))
+          console.log("Rol del usuario:", payload.roles)
+          console.log("Token expira en:", new Date(payload.exp * 1000))
+          console.log("Tiempo actual:", new Date())
+        } catch (e) {
+          console.error("Error al decodificar token:", e)
+        }
+      }
+
+      // Si es error de autorización, NO redirigir inmediatamente, solo loggear
+      if (response.status === 401 || response.status === 403) {
+        console.error("=== ERROR DE AUTORIZACIÓN ===")
+        console.error("Status:", response.status)
+        console.error("Esto indica que el backend no permite que OPERADOR cree titulares")
+
+        // Capturar el mensaje de error del backend antes de redirigir
+        const errorText = await response.text()
+        console.error("Mensaje del backend:", errorText)
+
+        // TEMPORALMENTE comentar la redirección para ver el error exacto
+        // handleAuthError(response.status)
+
+        return {
+          success: false,
+          message: `Error de autorización (${response.status}): ${errorText || "El rol OPERADOR no tiene permisos para crear titulares"}`,
+          titular: {} as Titular,
+        }
+      }
+
+      // Manejar errores de autenticación para otros casos
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada. Por favor, inicie sesión nuevamente.",
+          titular: {} as Titular,
+        }
+      }
 
       // Capturar la respuesta como texto primero
       const responseText = await response.text()
@@ -346,28 +442,34 @@ export const titularService = {
     id: number,
     datos: Partial<Omit<Titular, "id" | "fechaAlta">>,
   ): Promise<TitularResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/titulares/${id}`, {
-    //     method: 'PUT',
-    //     headers: getAuthHeaders(),
-    //     body: JSON.stringify(datos)
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al actualizar titular con ID ${id}:`, error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/titulares/${id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(datos),
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      titular: {} as Titular,
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+          titular: {} as Titular,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al actualizar titular con ID ${id}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al actualizar titular",
+        titular: {} as Titular,
+      }
     }
   },
 
@@ -377,95 +479,100 @@ export const titularService = {
     numeroDocumento: string,
     datos: Partial<Omit<Titular, "id" | "tipoDocumento" | "numeroDocumento" | "fechaAlta">>,
   ): Promise<TitularResponse> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(
-    //     `${API_URL}/titulares/documento?tipo=${tipoDocumento}&numero=${numeroDocumento}`,
-    //     {
-    //       method: 'PUT',
-    //       headers: getAuthHeaders(),
-    //       body: JSON.stringify(datos)
-    //     }
-    //   );
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al actualizar titular con documento ${tipoDocumento} ${numeroDocumento}:`, error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/titulares/documento?tipo=${tipoDocumento}&numero=${numeroDocumento}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(datos),
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
-      titular: {} as Titular,
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+          titular: {} as Titular,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al actualizar titular con documento ${tipoDocumento} ${numeroDocumento}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al actualizar titular",
+        titular: {} as Titular,
+      }
     }
   },
 
   // Eliminar un titular
   eliminarTitular: async (id: number): Promise<{ success: boolean; message: string }> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/titulares/${id}`, {
-    //     method: 'DELETE',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error(`Error al eliminar titular con ID ${id}:`, error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/titulares/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      })
 
-    return {
-      success: false,
-      message: "Servicio no implementado",
+      if (handleAuthError(response.status)) {
+        return {
+          success: false,
+          message: "Sesión expirada",
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error al eliminar titular con ID ${id}:`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Error desconocido al eliminar titular",
+      }
     }
   },
 
   // Obtener estadísticas de titulares
   obtenerEstadisticas: async (): Promise<TitularStats> => {
-    // En producción, sería algo como:
-    // try {
-    //   const response = await fetch(`${API_URL}/titulares/estadisticas`, {
-    //     method: 'GET',
-    //     headers: getAuthHeaders(),
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error(`Error ${response.status}: ${response.statusText}`);
-    //   }
-    //
-    //   return await response.json();
-    // } catch (error) {
-    //   console.error('Error al obtener estadísticas de titulares:', error);
-    //   throw error;
-    // }
+    try {
+      const response = await fetch(`${API_URL}/titulares/estadisticas`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
 
-    return {
-      total: 0,
-      porGrupoSanguineo: {
-        "0": 0,
-        A: 0,
-        B: 0,
-        AB: 0,
-      },
-      porFactorRh: {
-        positivo: 0,
-        negativo: 0,
-      },
-      porDonanteOrganos: {
-        si: 0,
-        no: 0,
-      },
-      nuevosUltimos30Dias: 0,
+      if (handleAuthError(response.status)) {
+        return {
+          total: 0,
+          porGrupoSanguineo: { "0": 0, A: 0, B: 0, AB: 0 },
+          porFactorRh: { positivo: 0, negativo: 0 },
+          porDonanteOrganos: { si: 0, no: 0 },
+          nuevosUltimos30Dias: 0,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Error al obtener estadísticas de titulares:", error)
+      return {
+        total: 0,
+        porGrupoSanguineo: { "0": 0, A: 0, B: 0, AB: 0 },
+        porFactorRh: { positivo: 0, negativo: 0 },
+        porDonanteOrganos: { si: 0, no: 0 },
+        nuevosUltimos30Dias: 0,
+      }
     }
   },
 }

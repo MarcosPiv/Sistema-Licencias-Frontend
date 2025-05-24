@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import gsap from "gsap"
 // Importar el nuevo hook al principio del archivo
 import { useDeviceSize } from "@/hooks/use-device-size"
+import { licenciaService } from "@/services/licencia-service"
 
 // Añadir esta función helper al inicio del componente, después de las importaciones
 const formatearFecha = (fechaString: string) => {
@@ -54,7 +55,6 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
   // Añadir después de la declaración de los otros estados:
   const [isLoading, setIsLoading] = useState(false)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
   // Función de utilidad para animar elementos con error
   const animateErrorField = (element: HTMLElement | null) => {
     if (!element) return
@@ -149,7 +149,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -162,9 +162,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
     }
 
     try {
-      console.log("Realizando petición al API con parámetros directos...")
-      // Convertir el tipo de documento a mayúsculas para la API
-      const tipoDocumentoAPI = tipoDocParam.toUpperCase()
+      console.log("Realizando petición al servicio con parámetros directos...")
 
       // Añadir animación de carga al botón
       if (currentFormRef.current) {
@@ -179,49 +177,16 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         }
       }
 
-      // Realizar la petición al API con el tipo de documento en mayúsculas
-      const response = await fetch(
-        `${API_URL}/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
-      )
+      // Usar el servicio en lugar de fetch directo
+      const resultado = await licenciaService.buscarLicenciasPorTitular(tipoDocParam, numDocParam)
 
-      console.log("Respuesta del API:", response.status)
+      console.log("Respuesta del servicio:", resultado)
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log("Datos recibidos:", data)
-
-      // Verificar si hay licencias
-      if (!data.licencias || data.licencias.length === 0) {
-        setErrorBusqueda("No se encontraron licencias con ese documento")
+      if (!resultado.success) {
+        setErrorBusqueda(resultado.message)
         setIsLoading(false)
         return
       }
-
-      // Mapear los datos recibidos al formato que espera el componente
-      const licenciasFormateadas = data.licencias.map((licencia) => ({
-        id: licencia.id,
-        numeroLicencia: licencia.id.toString(),
-        titular: {
-          id: data.titular.id,
-          tipoDocumento: data.titular.tipoDocumento,
-          numeroDocumento: data.titular.numeroDocumento,
-          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
-          fechaNacimiento: data.titular.fechaNacimiento,
-          direccion: data.titular.direccion,
-          grupoSanguineo: data.titular.grupoSanguineo,
-          factorRh: data.titular.factorRh,
-          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
-        },
-        claseLicencia: licencia.clase,
-        fechaEmision: licencia.fechaEmision,
-        fechaVencimiento: licencia.fechaVencimiento,
-        vigencia: licencia.vigenciaAnios,
-        costo: licencia.costo,
-        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
-      }))
 
       // Animación de éxito en la búsqueda
       if (currentFormRef.current) {
@@ -234,13 +199,13 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         })
       }
 
-      setResultadosBusqueda(licenciasFormateadas)
+      setResultadosBusqueda(resultado.licencias || [])
 
       // Si solo hay un resultado, seleccionarlo automáticamente
-      if (licenciasFormateadas.length === 1) {
+      if (resultado.licencias && resultado.licencias.length === 1) {
         console.log("Seleccionando automáticamente la única licencia encontrada")
         setTimeout(() => {
-          seleccionarLicencia(licenciasFormateadas[0])
+          seleccionarLicencia(resultado.licencias![0])
         }, 500)
       }
     } catch (error) {
@@ -289,7 +254,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -340,9 +305,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
     }
 
     try {
-      console.log("Realizando petición al API...")
-      // Convertir el tipo de documento a mayúsculas para la API
-      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+      console.log("Realizando petición al servicio...")
 
       // Añadir animación de carga al botón
       if (currentFormRef.current) {
@@ -357,23 +320,13 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         }
       }
 
-      // Realizar la petición al API con el tipo de documento en mayúsculas
-      const response = await fetch(
-        `${API_URL}/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
-      )
+      // Usar el servicio en lugar de fetch directo
+      const resultado = await licenciaService.buscarLicenciasPorTitular(tipoDocumento, numeroDocumento)
 
-      console.log("Respuesta del API:", response.status)
+      console.log("Respuesta del servicio:", resultado)
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log("Datos recibidos:", data)
-
-      // Verificar si hay licencias
-      if (!data.licencias || data.licencias.length === 0) {
-        setErrorBusqueda("No se encontraron licencias con ese documento")
+      if (!resultado.success) {
+        setErrorBusqueda(resultado.message)
         setIsLoading(false)
 
         // Animación de error mejorada
@@ -404,29 +357,6 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         return
       }
 
-      // Mapear los datos recibidos al formato que espera el componente
-      const licenciasFormateadas = data.licencias.map((licencia) => ({
-        id: licencia.id,
-        numeroLicencia: licencia.id.toString(),
-        titular: {
-          id: data.titular.id,
-          tipoDocumento: data.titular.tipoDocumento,
-          numeroDocumento: data.titular.numeroDocumento,
-          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
-          fechaNacimiento: data.titular.fechaNacimiento,
-          direccion: data.titular.direccion,
-          grupoSanguineo: data.titular.grupoSanguineo,
-          factorRh: data.titular.factorRh,
-          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
-        },
-        claseLicencia: licencia.clase,
-        fechaEmision: licencia.fechaEmision,
-        fechaVencimiento: licencia.fechaVencimiento,
-        vigencia: licencia.vigenciaAnios,
-        costo: licencia.costo,
-        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
-      }))
-
       // Animación de éxito en la búsqueda
       if (currentFormRef.current) {
         gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
@@ -438,7 +368,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         })
       }
 
-      setResultadosBusqueda(licenciasFormateadas)
+      setResultadosBusqueda(resultado.licencias || [])
     } catch (error) {
       console.error("Error al buscar licencias:", error)
       setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
@@ -1261,10 +1191,10 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>
                               <span className="font-semibold">Tipo de sangre:</span>{" "}
                               {licenciaSeleccionada?.titular.grupoSanguineo}{" "}
-                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO" 
-                                ? "Positivo" 
-                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO" 
-                                  ? "Negativo" 
+                              {licenciaSeleccionada?.titular.factorRh === "POSITIVO"
+                                ? "Positivo"
+                                : licenciaSeleccionada?.titular.factorRh === "NEGATIVO"
+                                  ? "Negativo"
                                   : licenciaSeleccionada?.titular.factorRh}
                             </div>
                             <div className={`text-sm md:text-base lg:text-xl xl:text-2xl`}>

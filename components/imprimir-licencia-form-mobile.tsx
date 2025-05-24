@@ -20,7 +20,9 @@ import gsap from "gsap"
 // Importar el nuevo hook al principio del archivo
 import { useDeviceSize } from "@/hooks/use-device-size"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.sistema-licencias.gob.ar';
+// Agregar la importación del servicio al inicio del archivo, después de las otras importaciones:
+import { licenciaService } from "@/services/licencia-service"
+
 // Añadir esta función helper al inicio del componente, después de las importaciones
 const formatearFecha = (fechaString: string) => {
   // Crear la fecha agregando la zona horaria local para evitar problemas de UTC
@@ -147,7 +149,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -160,9 +162,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
 
     try {
-      console.log("Realizando petición al API (mobile) con parámetros directos...")
-      // Convertir el tipo de documento a mayúsculas para la API
-      const tipoDocumentoAPI = tipoDocParam.toUpperCase()
+      console.log("Realizando petición al servicio (mobile) con parámetros directos...")
 
       // Añadir animación de carga al botón
       if (currentFormRef.current) {
@@ -177,49 +177,16 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         }
       }
 
-      // Realizar la petición al API con el tipo de documento en mayúsculas
-      const response = await fetch(
-        `${API_URL}/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numDocParam}`,
-      )
+      // Usar el servicio en lugar de fetch directo
+      const resultado = await licenciaService.buscarLicenciasPorTitular(tipoDocParam, numDocParam)
 
-      console.log("Respuesta del API (mobile):", response.status)
+      console.log("Respuesta del servicio (mobile):", resultado)
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log("Datos recibidos (mobile):", data)
-
-      // Verificar si hay licencias
-      if (!data.licencias || data.licencias.length === 0) {
-        setErrorBusqueda("No se encontraron licencias con ese documento")
+      if (!resultado.success) {
+        setErrorBusqueda(resultado.message)
         setIsLoading(false)
         return
       }
-
-      // Mapear los datos recibidos al formato que espera el componente
-      const licenciasFormateadas = data.licencias.map((licencia) => ({
-        id: licencia.id,
-        numeroLicencia: licencia.id.toString(),
-        titular: {
-          id: data.titular.id,
-          tipoDocumento: data.titular.tipoDocumento,
-          numeroDocumento: data.titular.numeroDocumento,
-          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
-          fechaNacimiento: data.titular.fechaNacimiento,
-          direccion: data.titular.direccion,
-          grupoSanguineo: data.titular.grupoSanguineo,
-          factorRh: data.titular.factorRh,
-          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
-        },
-        claseLicencia: licencia.clase,
-        fechaEmision: licencia.fechaEmision,
-        fechaVencimiento: licencia.fechaVencimiento,
-        vigencia: licencia.vigenciaAnios,
-        costo: licencia.costo,
-        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
-      }))
 
       // Animación de éxito en la búsqueda
       if (currentFormRef.current) {
@@ -232,13 +199,13 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         })
       }
 
-      setResultadosBusqueda(licenciasFormateadas)
+      setResultadosBusqueda(resultado.licencias || [])
 
       // Si solo hay un resultado, seleccionarlo automáticamente
-      if (licenciasFormateadas.length === 1) {
+      if (resultado.licencias && resultado.licencias.length === 1) {
         console.log("Seleccionando automáticamente la única licencia encontrada (mobile)")
         setTimeout(() => {
-          seleccionarLicencia(licenciasFormateadas[0])
+          seleccionarLicencia(resultado.licencias![0])
         }, 500)
       }
     } catch (error) {
@@ -284,7 +251,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     setIsLoading(true)
 
     // Simular tiempo de carga para mostrar el spinner
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
     // Determinar qué referencia usar según la pestaña activa
     const currentFormRef = activeTab === "licencia" ? searchFormRef : comprobanteSearchFormRef
@@ -336,9 +303,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
     }
 
     try {
-      console.log("Realizando petición al API (mobile)...")
-      // Convertir el tipo de documento a mayúsculas para la API
-      const tipoDocumentoAPI = tipoDocumento.toUpperCase()
+      console.log("Realizando petición al servicio (mobile)...")
 
       // Añadir animación de carga al botón
       if (currentFormRef.current) {
@@ -353,23 +318,13 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         }
       }
 
-      // Realizar la petición al API
-      const response = await fetch(
-        `${API_URL}/api/licencias/titular?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
-      )
+      // Usar el servicio en lugar de fetch directo
+      const resultado = await licenciaService.buscarLicenciasPorTitular(tipoDocumento, numeroDocumento)
 
-      console.log("Respuesta del API (mobile):", response.status)
+      console.log("Respuesta del servicio (mobile):", resultado)
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log("Datos recibidos (mobile):", data)
-
-      // Verificar si hay licencias
-      if (!data.licencias || data.licencias.length === 0) {
-        setErrorBusqueda("No se encontraron licencias con ese documento")
+      if (!resultado.success) {
+        setErrorBusqueda(resultado.message)
         setIsLoading(false)
 
         // Animación de error
@@ -401,29 +356,6 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         return
       }
 
-      // Mapear los datos recibidos al formato que espera el componente
-      const licenciasFormateadas = data.licencias.map((licencia) => ({
-        id: licencia.id,
-        numeroLicencia: licencia.id.toString(),
-        titular: {
-          id: data.titular.id,
-          tipoDocumento: data.titular.tipoDocumento,
-          numeroDocumento: data.titular.numeroDocumento,
-          nombreApellido: `${data.titular.apellido}, ${data.titular.nombre}`,
-          fechaNacimiento: data.titular.fechaNacimiento,
-          direccion: data.titular.direccion,
-          grupoSanguineo: data.titular.grupoSanguineo,
-          factorRh: data.titular.factorRh,
-          donanteOrganos: data.titular.donanteOrganos ? "SÍ" : "NO",
-        },
-        claseLicencia: licencia.clase,
-        fechaEmision: licencia.fechaEmision,
-        fechaVencimiento: licencia.fechaVencimiento,
-        vigencia: licencia.vigenciaAnios,
-        costo: licencia.costo,
-        estado: licencia.vigente ? "VIGENTE" : "VENCIDA",
-      }))
-
       // Animación de éxito en la búsqueda
       if (currentFormRef.current) {
         gsap.to(currentFormRef.current.querySelectorAll("input, select, button"), {
@@ -435,7 +367,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         })
       }
 
-      setResultadosBusqueda(licenciasFormateadas)
+      setResultadosBusqueda(resultado.licencias || [])
     } catch (error) {
       console.error("Error al buscar licencias:", error)
       setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
@@ -1185,7 +1117,7 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
                           <div className="absolute top-[40%] left-[10%] right-[10%] text-black">
                             <div className={`grid grid-cols-2 gap-x-2 gap-y-1 ${getTextSizeClass("text-[11px]")}`}>
                               <div>
-                                <span className="font-semibold">{licenciaSeleccionada?.titular.tipoDocumento}:</span>{" "}
+                                <span className="font-semibold">DNI:</span>{" "}
                                 {licenciaSeleccionada?.titular.numeroDocumento}
                               </div>
                               <div className="text-right">

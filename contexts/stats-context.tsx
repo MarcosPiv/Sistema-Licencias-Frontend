@@ -46,21 +46,89 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
     titularesRegistrados: 0,
   })
   const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isClient, setIsClient] = useState<boolean>(false)
+
+  // Verificar si estamos en el cliente (no en SSR)
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Función para manejar errores de autenticación
+  const handleAuthError = (status: number) => {
+    if (status === 401 || status === 403) {
+      console.log(`Error de autenticación detectado: ${status}`)
+      // Token expirado o no válido
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_token")
+        localStorage.removeItem("user_data")
+        // Redirigir al login
+        window.location.href = "/"
+      }
+      return true
+    }
+    return false
+  }
+
+  // Función para verificar si el usuario está autenticado
+  const isUserAuthenticated = () => {
+    if (typeof window === "undefined") return false
+
+    const token = localStorage.getItem("auth_token")
+    if (!token) {
+      console.log("No hay token de autenticación disponible")
+      return false
+    }
+
+    try {
+      // Verificar si el token no ha expirado
+      const payload = JSON.parse(atob(token.split(".")[1]))
+      const currentTime = Date.now() / 1000
+      const isValid = payload.exp > currentTime
+
+      if (!isValid) {
+        console.log("Token expirado")
+        localStorage.removeItem("auth_token")
+        localStorage.removeItem("user_data")
+      }
+
+      return isValid
+    } catch (error) {
+      console.error("Error al verificar token:", error)
+      localStorage.removeItem("auth_token")
+      return false
+    }
+  }
 
   // Función para cargar las estadísticas desde la API
   const loadStatsFromAPI = async () => {
     try {
       setIsLoading(true)
-      console.log("Cargando estadísticas desde la API...")
+      console.log("🔄 Iniciando carga de estadísticas desde la API...")
 
-      // Obtener token de autenticación (si es necesario)
-      const token = localStorage.getItem("authToken")
+      // Verificar que estamos en el cliente
+      if (!isClient || typeof window === "undefined") {
+        console.log("⏳ Esperando a estar en el cliente...")
+        loadStatsFromLocalData()
+        return
+      }
+
+      // Verificar autenticación antes de hacer peticiones
+      if (!isUserAuthenticated()) {
+        console.log("❌ Usuario no autenticado, cargando datos locales...")
+        loadStatsFromLocalData()
+        return
+      }
+
+      const token = localStorage.getItem("auth_token")
+      console.log("🔑 Token encontrado, haciendo peticiones a la API...")
 
       // Configurar headers para las peticiones
       const headers = {
         "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
+        Authorization: `Bearer ${token}`,
       }
+
+      console.log("📡 Enviando peticiones paralelas a la API...")
 
       // Realizar peticiones en paralelo para mejorar el rendimiento
       const [licenciasResponse, vencidasResponse, titularesResponse] = await Promise.all([
@@ -74,17 +142,33 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
         fetch(`${API_BASE_URL}/titulares/count`, { headers }),
       ])
 
+      console.log("📊 Respuestas recibidas:", {
+        licencias: licenciasResponse.status,
+        vencidas: vencidasResponse.status,
+        titulares: titularesResponse.status,
+      })
+
+      // Verificar errores de autenticación en cada respuesta
+      if (
+        handleAuthError(licenciasResponse.status) ||
+        handleAuthError(vencidasResponse.status) ||
+        handleAuthError(titularesResponse.status)
+      ) {
+        console.log("🚫 Error de autenticación detectado, redirigiendo al login...")
+        return
+      }
+
       // Verificar si alguna petición falló
       if (!licenciasResponse.ok) {
-        console.error(`Error en la petición de licencias emitidas: ${licenciasResponse.status}`)
+        console.error(`❌ Error en la petición de licencias emitidas: ${licenciasResponse.status}`)
         throw new Error(`Error al obtener licencias emitidas: ${licenciasResponse.statusText}`)
       }
       if (!vencidasResponse.ok) {
-        console.error(`Error en la petición de licencias vencidas: ${vencidasResponse.status}`)
+        console.error(`❌ Error en la petición de licencias vencidas: ${vencidasResponse.status}`)
         throw new Error(`Error al obtener licencias vencidas: ${vencidasResponse.statusText}`)
       }
       if (!titularesResponse.ok) {
-        console.error(`Error en la petición de titulares: ${titularesResponse.status}`)
+        console.error(`❌ Error en la petición de titulares: ${titularesResponse.status}`)
         throw new Error(`Error al obtener titulares: ${titularesResponse.statusText}`)
       }
 
@@ -93,9 +177,11 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       const vencidasText = await vencidasResponse.text()
       const titularesText = await titularesResponse.text()
 
-      console.log("Respuesta de licencias emitidas (texto):", licenciasText)
-      console.log("Respuesta de licencias vencidas (texto):", vencidasText)
-      console.log("Respuesta de titulares (texto):", titularesText)
+      console.log("📄 Respuestas de texto:", {
+        licenciasText,
+        vencidasText,
+        titularesText,
+      })
 
       // Convertir los textos a números
       const licenciasEmitidas = Number.parseInt(licenciasText, 10) || 0
@@ -109,24 +195,107 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
         titularesRegistrados,
       })
 
-      console.log("Estadísticas cargadas desde la API:", {
+      console.log("✅ Estadísticas cargadas desde la API con autenticación:", {
         licenciasEmitidas,
         licenciasVencidas,
         titularesRegistrados,
       })
     } catch (error) {
-      console.error("Error al cargar estadísticas desde la API:", error)
+      console.error("❌ Error al cargar estadísticas desde la API:", error)
 
+      // En caso de error, cargar datos locales como fallback
+      loadStatsFromLocalData()
     } finally {
       setIsLoading(false)
     }
   }
 
+  // Función para cargar datos locales como fallback
+  const loadStatsFromLocalData = async () => {
+    try {
+      console.log("📁 Cargando estadísticas desde datos locales...")
 
-  // Cargar estadísticas iniciales
+      // Importar datos locales
+      const { licenciasDB } = await import("@/data/licencia-data")
+      const { titularesDB } = await import("@/data/titular-data")
+
+      // Calcular estadísticas
+      const licenciasEmitidas = licenciasDB.length
+
+      // Calcular licencias vencidas
+      const fechaActual = new Date()
+      const licenciasVencidas = licenciasDB.filter(
+        (licencia) => new Date(licencia.fechaVencimiento) < fechaActual,
+      ).length
+
+      const titularesRegistrados = titularesDB.length
+
+      // Actualizar estado
+      setStats({
+        licenciasEmitidas,
+        licenciasVencidas,
+        titularesRegistrados,
+      })
+
+      console.log("✅ Estadísticas cargadas desde datos locales:", {
+        licenciasEmitidas,
+        licenciasVencidas,
+        titularesRegistrados,
+      })
+    } catch (error) {
+      console.error("❌ Error al cargar estadísticas desde datos locales:", error)
+
+      // Si todo falla, mantener los valores por defecto
+      console.log("⚠️ Usando valores por defecto para estadísticas")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Cargar estadísticas iniciales cuando el cliente esté listo
   useEffect(() => {
-    loadStatsFromAPI()
-  }, [])
+    if (isClient) {
+      console.log("🚀 Cliente listo, iniciando carga de estadísticas...")
+      // Pequeño delay para asegurar que el localStorage esté disponible
+      const timer = setTimeout(() => {
+        loadStatsFromAPI()
+      }, 100)
+
+      return () => clearTimeout(timer)
+    }
+  }, [isClient])
+
+  // Escuchar cambios en el localStorage (cuando el usuario se loguea)
+  useEffect(() => {
+    if (!isClient) return
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "auth_token") {
+        console.log("🔄 Token de autenticación cambió, recargando estadísticas...")
+        setTimeout(() => {
+          loadStatsFromAPI()
+        }, 500)
+      }
+    }
+
+    // Escuchar cambios en localStorage
+    window.addEventListener("storage", handleStorageChange)
+
+    // También escuchar eventos personalizados para cambios en la misma pestaña
+    const handleAuthChange = () => {
+      console.log("🔄 Evento de autenticación detectado, recargando estadísticas...")
+      setTimeout(() => {
+        loadStatsFromAPI()
+      }, 500)
+    }
+
+    window.addEventListener("auth-changed", handleAuthChange)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      window.removeEventListener("auth-changed", handleAuthChange)
+    }
+  }, [isClient])
 
   // Función para incrementar licencias emitidas (solo actualiza el estado local)
   const incrementLicenciasEmitidas = () => {
@@ -136,7 +305,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       licenciasEmitidas: prevStats.licenciasEmitidas + 1,
     }))
 
-    console.log("Contador de licencias emitidas incrementado localmente")
+    console.log("➕ Contador de licencias emitidas incrementado localmente")
   }
 
   // Función para incrementar titulares registrados (solo actualiza el estado local)
@@ -147,12 +316,18 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       titularesRegistrados: prevStats.titularesRegistrados + 1,
     }))
 
-    console.log("Contador de titulares registrados incrementado localmente")
+    console.log("➕ Contador de titulares registrados incrementado localmente")
   }
 
   // Función para refrescar todas las estadísticas
   const refreshStats = async () => {
-    await loadStatsFromAPI()
+    console.log("🔄 Refrescando estadísticas manualmente...")
+    if (isClient && isUserAuthenticated()) {
+      await loadStatsFromAPI()
+    } else {
+      console.log("📁 Usuario no autenticado, cargando datos locales...")
+      loadStatsFromLocalData()
+    }
   }
 
   // Valor del contexto
