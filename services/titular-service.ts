@@ -59,13 +59,14 @@ const getAuthHeaders = () => {
   return headers
 }
 
-// Función para manejar errores de autenticación
+// Función para manejar errores de autenticación (SOLO 401, NO 403)
 const handleAuthError = (status: number) => {
-  if (status === 401 || status === 403) {
-    // Token expirado o no válido
+  // SOLO redirigir en caso de 401 (token inválido/expirado)
+  // NO redirigir en caso de 403 (sin permisos pero token válido)
+  if (status === 401) {
+    console.log(`❌ Error 401: Token inválido o expirado`)
     localStorage.removeItem("auth_token")
     localStorage.removeItem("user_data")
-    // Redirigir al login
     window.location.href = "/"
     return true
   }
@@ -153,7 +154,7 @@ export const titularService = {
       // Convertir el tipo de documento a mayúsculas para la API
       const tipoDocumentoAPI = tipoDocumento.toUpperCase()
 
-      console.log(`Buscando titular: ${tipoDocumentoAPI} ${numeroDocumento}`)
+      console.log(`🔍 Verificando si existe titular: ${tipoDocumentoAPI} ${numeroDocumento}`)
 
       const response = await fetch(
         `${API_URL}/titulares?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`,
@@ -163,7 +164,7 @@ export const titularService = {
         },
       )
 
-      // Manejar errores de autenticación
+      // Manejar errores de autenticación (SOLO 401)
       if (handleAuthError(response.status)) {
         return {
           success: false,
@@ -172,12 +173,12 @@ export const titularService = {
         }
       }
 
-      // Capturar el texto de la respuesta primero para poder mostrarlo en caso de error
+      // Capturar el texto de la respuesta primero
       const responseText = await response.text()
-      console.log("Respuesta del servidor:", responseText)
 
       // Si es 404, significa que el titular no existe (esto es normal al verificar antes de crear)
       if (response.status === 404) {
+        console.log(`✅ Titular no existe (404) - se puede proceder a crear`)
         return {
           success: false,
           message: "Titular no encontrado",
@@ -185,8 +186,18 @@ export const titularService = {
         }
       }
 
+      // Si es 403, OPERADOR no tiene permisos para buscar, pero puede crear
+      if (response.status === 403) {
+        console.log(`⚠️ OPERADOR sin permisos para buscar (403) - asumiendo que no existe y se puede crear`)
+        return {
+          success: false,
+          message: "Sin permisos para verificar titular existente - se procederá a crear",
+          titular: {} as Titular,
+        }
+      }
+
       if (!response.ok) {
-        // Intentar parsear el error como JSON si es posible
+        // Para otros errores, intentar parsear el mensaje
         let errorMessage = `Error ${response.status}: ${response.statusText}`
         try {
           if (responseText) {
@@ -197,7 +208,13 @@ export const titularService = {
           console.error("No se pudo parsear el error como JSON:", parseError)
         }
 
-        throw new Error(errorMessage)
+        // No lanzar error para 403, solo para otros códigos
+        console.log(`⚠️ Error ${response.status} al verificar titular: ${errorMessage}`)
+        return {
+          success: false,
+          message: errorMessage,
+          titular: {} as Titular,
+        }
       }
 
       // Parsear la respuesta JSON solo si hay contenido
@@ -210,11 +227,16 @@ export const titularService = {
         }
       } catch (parseError) {
         console.error("Error al parsear la respuesta JSON:", parseError)
-        throw new Error("La respuesta del servidor no es un JSON válido")
+        return {
+          success: false,
+          message: "La respuesta del servidor no es un JSON válido",
+          titular: {} as Titular,
+        }
       }
 
       // Verificar si los datos del titular están presentes
       if (!titularData || !titularData.id) {
+        console.log(`✅ No se encontró titular con los datos proporcionados - se puede crear`)
         return {
           success: false,
           message: "No se encontró el titular con los datos proporcionados",
@@ -236,13 +258,14 @@ export const titularService = {
         fechaAlta: titularData.fechaAlta || new Date().toISOString().split("T")[0],
       }
 
+      console.log(`✅ Titular encontrado:`, titular)
       return {
         success: true,
         message: "Titular encontrado",
         titular: titular,
       }
     } catch (error) {
-      console.error(`Error al obtener titular con documento ${tipoDocumento} ${numeroDocumento}:`, error)
+      console.error(`❌ Error al verificar titular con documento ${tipoDocumento} ${numeroDocumento}:`, error)
       return {
         success: false,
         message: error instanceof Error ? error.message : "Error desconocido al buscar titular",
@@ -281,16 +304,6 @@ export const titularService = {
         datos.donanteOrganos === "SÍ" ||
         datos.donanteOrganos === "sí"
 
-      // Log para depuración
-      console.log("Datos originales:", {
-        factorRh: datos.factorRh,
-        donanteOrganos: datos.donanteOrganos,
-      })
-      console.log("Datos transformados:", {
-        factorRh: factorRhValido,
-        donanteOrganos: esDonanteOrganos,
-      })
-
       const datosParaEnviar = {
         nombre: nombre,
         apellido: apellidoCompleto || apellido,
@@ -303,8 +316,8 @@ export const titularService = {
         donanteOrganos: esDonanteOrganos,
       }
 
-      console.log("Enviando al backend:", JSON.stringify(datosParaEnviar))
-      console.log("Headers de autenticación:", getAuthHeaders())
+      console.log("=== CREAR TITULAR ===")
+      console.log("📤 Enviando al backend:", JSON.stringify(datosParaEnviar, null, 2))
 
       const response = await fetch(`${API_URL}/titulares`, {
         method: "POST",
@@ -312,47 +325,11 @@ export const titularService = {
         body: JSON.stringify(datosParaEnviar),
       })
 
-      // NUEVO: Logging detallado para debug
-      console.log("=== DEBUG CREAR TITULAR ===")
-      console.log("Status de respuesta:", response.status)
-      console.log("Status text:", response.statusText)
-      console.log("Headers de respuesta:", Object.fromEntries(response.headers.entries()))
+      console.log("📥 Status de respuesta:", response.status)
 
-      // Verificar el token antes de procesar la respuesta
-      console.log("Token presente:", !!token)
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split(".")[1]))
-          console.log("Rol del usuario:", payload.roles)
-          console.log("Token expira en:", new Date(payload.exp * 1000))
-          console.log("Tiempo actual:", new Date())
-        } catch (e) {
-          console.error("Error al decodificar token:", e)
-        }
-      }
-
-      // Si es error de autorización, NO redirigir inmediatamente, solo loggear
-      if (response.status === 401 || response.status === 403) {
-        console.error("=== ERROR DE AUTORIZACIÓN ===")
-        console.error("Status:", response.status)
-        console.error("Esto indica que el backend no permite que OPERADOR cree titulares")
-
-        // Capturar el mensaje de error del backend antes de redirigir
-        const errorText = await response.text()
-        console.error("Mensaje del backend:", errorText)
-
-        // TEMPORALMENTE comentar la redirección para ver el error exacto
-        // handleAuthError(response.status)
-
-        return {
-          success: false,
-          message: `Error de autorización (${response.status}): ${errorText || "El rol OPERADOR no tiene permisos para crear titulares"}`,
-          titular: {} as Titular,
-        }
-      }
-
-      // Manejar errores de autenticación para otros casos
+      // IMPORTANTE: Solo manejar 401, NO 403
       if (handleAuthError(response.status)) {
+        console.log("❌ Error 401: Token inválido, redirigiendo al login...")
         return {
           success: false,
           message: "Sesión expirada. Por favor, inicie sesión nuevamente.",
@@ -362,7 +339,16 @@ export const titularService = {
 
       // Capturar la respuesta como texto primero
       const responseText = await response.text()
-      console.log("Respuesta del backend:", responseText)
+
+      // Si es 403, NO redirigir, solo mostrar error
+      if (response.status === 403) {
+        console.log("⚠️ Error 403: Sin permisos para crear titular")
+        return {
+          success: false,
+          message: "No tiene permisos para crear titulares. Contacte al administrador.",
+          titular: {} as Titular,
+        }
+      }
 
       if (!response.ok) {
         // Intentar parsear el error del backend
@@ -371,20 +357,18 @@ export const titularService = {
         try {
           if (responseText) {
             const errorJson = JSON.parse(responseText)
-            // Usar directamente el mensaje del backend
             errorMessage = errorJson.message || errorJson.error || errorMessage
           }
         } catch (parseError) {
           console.error("No se pudo parsear el error como JSON:", parseError)
-          // Si no se puede parsear, usar el texto de respuesta directamente
           errorMessage = responseText || errorMessage
         }
 
-        console.error("Error del backend:", errorMessage)
+        console.error("❌ Error del backend:", errorMessage)
 
         return {
           success: false,
-          message: errorMessage, // Retornar directamente el mensaje del backend
+          message: errorMessage,
           titular: {} as Titular,
         }
       }
@@ -406,7 +390,7 @@ export const titularService = {
         }
       }
 
-      console.log("Titular creado exitosamente:", responseData)
+      console.log("✅ Titular creado exitosamente:", responseData)
 
       // Transformar la respuesta del backend al formato esperado por el frontend
       const titularCreado: Titular = {
@@ -428,7 +412,7 @@ export const titularService = {
         titular: titularCreado,
       }
     } catch (error) {
-      console.error("Error al crear titular:", error)
+      console.error("❌ Error al crear titular:", error)
       return {
         success: false,
         message: error instanceof Error ? error.message : "Error desconocido al crear titular",

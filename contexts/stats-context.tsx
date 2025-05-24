@@ -47,21 +47,37 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
   })
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isClient, setIsClient] = useState<boolean>(false)
+  const [lastToken, setLastToken] = useState<string | null>(null)
 
   // Verificar si estamos en el cliente (no en SSR)
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  // Función para manejar errores de autenticación
+  // Función para obtener el rol del usuario actual
+  const getCurrentUserRole = () => {
+    if (typeof window === "undefined") return null
+
+    const token = localStorage.getItem("auth_token")
+    if (!token) return null
+
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]))
+      return payload.roles && payload.roles.length > 0 ? payload.roles[0] : "OPERADOR"
+    } catch (error) {
+      console.error("❌ Error al obtener rol del usuario:", error)
+      return null
+    }
+  }
+
+  // Función para manejar errores de autenticación (solo 401, no 403)
   const handleAuthError = (status: number) => {
-    if (status === 401 || status === 403) {
-      console.log(`Error de autenticación detectado: ${status}`)
-      // Token expirado o no válido
+    if (status === 401) {
+      console.log(`❌ Error de autenticación detectado: ${status} - Token inválido o expirado`)
+      // Solo redirigir en caso de 401 (token inválido/expirado)
       if (typeof window !== "undefined") {
         localStorage.removeItem("auth_token")
         localStorage.removeItem("user_data")
-        // Redirigir al login
         window.location.href = "/"
       }
       return true
@@ -75,7 +91,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
 
     const token = localStorage.getItem("auth_token")
     if (!token) {
-      console.log("No hay token de autenticación disponible")
+      console.log("⚠️ No hay token de autenticación disponible")
       return false
     }
 
@@ -86,14 +102,14 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       const isValid = payload.exp > currentTime
 
       if (!isValid) {
-        console.log("Token expirado")
+        console.log("⏰ Token expirado")
         localStorage.removeItem("auth_token")
         localStorage.removeItem("user_data")
       }
 
       return isValid
     } catch (error) {
-      console.error("Error al verificar token:", error)
+      console.error("❌ Error al verificar token:", error)
       localStorage.removeItem("auth_token")
       return false
     }
@@ -108,19 +124,25 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
       // Verificar que estamos en el cliente
       if (!isClient || typeof window === "undefined") {
         console.log("⏳ Esperando a estar en el cliente...")
-        loadStatsFromLocalData()
+        setIsLoading(false)
         return
       }
 
       // Verificar autenticación antes de hacer peticiones
       if (!isUserAuthenticated()) {
-        console.log("❌ Usuario no autenticado, cargando datos locales...")
-        loadStatsFromLocalData()
+        console.log("🔒 Usuario no autenticado, manteniendo contadores en 0")
+        setStats({
+          licenciasEmitidas: 0,
+          licenciasVencidas: 0,
+          titularesRegistrados: 0,
+        })
+        setIsLoading(false)
         return
       }
 
       const token = localStorage.getItem("auth_token")
-      console.log("🔑 Token encontrado, haciendo peticiones a la API...")
+      const userRole = getCurrentUserRole()
+      console.log("🔑 Token encontrado, rol del usuario:", userRole)
 
       // Configurar headers para las peticiones
       const headers = {
@@ -148,7 +170,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
         titulares: titularesResponse.status,
       })
 
-      // Verificar errores de autenticación en cada respuesta
+      // Verificar errores de autenticación (solo 401)
       if (
         handleAuthError(licenciasResponse.status) ||
         handleAuthError(vencidasResponse.status) ||
@@ -158,7 +180,35 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
         return
       }
 
-      // Verificar si alguna petición falló
+      // Manejar errores 403 (sin permisos) sin redirigir
+      const hasPermissionError =
+        licenciasResponse.status === 403 || vencidasResponse.status === 403 || titularesResponse.status === 403
+
+      if (hasPermissionError) {
+        console.log("⚠️ Error 403: Usuario sin permisos para ver estadísticas completas")
+        console.log("👤 Rol del usuario:", userRole)
+
+        // Para OPERADOR, mostrar estadísticas básicas o usar valores por defecto
+        if (userRole === "OPERADOR") {
+          console.log("📊 Configurando estadísticas básicas para OPERADOR...")
+          setStats({
+            licenciasEmitidas: 0, // O un valor calculado localmente
+            licenciasVencidas: 0,
+            titularesRegistrados: 0,
+          })
+        } else {
+          // Para otros roles, mantener en 0
+          setStats({
+            licenciasEmitidas: 0,
+            licenciasVencidas: 0,
+            titularesRegistrados: 0,
+          })
+        }
+        setIsLoading(false)
+        return
+      }
+
+      // Verificar si alguna petición falló por otros motivos
       if (!licenciasResponse.ok) {
         console.error(`❌ Error en la petición de licencias emitidas: ${licenciasResponse.status}`)
         throw new Error(`Error al obtener licencias emitidas: ${licenciasResponse.statusText}`)
@@ -195,7 +245,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
         titularesRegistrados,
       })
 
-      console.log("✅ Estadísticas cargadas desde la API con autenticación:", {
+      console.log("✅ Estadísticas cargadas desde la API:", {
         licenciasEmitidas,
         licenciasVencidas,
         titularesRegistrados,
@@ -203,50 +253,12 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
     } catch (error) {
       console.error("❌ Error al cargar estadísticas desde la API:", error)
 
-      // En caso de error, cargar datos locales como fallback
-      loadStatsFromLocalData()
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Función para cargar datos locales como fallback
-  const loadStatsFromLocalData = async () => {
-    try {
-      console.log("📁 Cargando estadísticas desde datos locales...")
-
-      // Importar datos locales
-      const { licenciasDB } = await import("@/data/licencia-data")
-      const { titularesDB } = await import("@/data/titular-data")
-
-      // Calcular estadísticas
-      const licenciasEmitidas = licenciasDB.length
-
-      // Calcular licencias vencidas
-      const fechaActual = new Date()
-      const licenciasVencidas = licenciasDB.filter(
-        (licencia) => new Date(licencia.fechaVencimiento) < fechaActual,
-      ).length
-
-      const titularesRegistrados = titularesDB.length
-
-      // Actualizar estado
+      // En caso de error, mantener contadores en 0
       setStats({
-        licenciasEmitidas,
-        licenciasVencidas,
-        titularesRegistrados,
+        licenciasEmitidas: 0,
+        licenciasVencidas: 0,
+        titularesRegistrados: 0,
       })
-
-      console.log("✅ Estadísticas cargadas desde datos locales:", {
-        licenciasEmitidas,
-        licenciasVencidas,
-        titularesRegistrados,
-      })
-    } catch (error) {
-      console.error("❌ Error al cargar estadísticas desde datos locales:", error)
-
-      // Si todo falla, mantener los valores por defecto
-      console.log("⚠️ Usando valores por defecto para estadísticas")
     } finally {
       setIsLoading(false)
     }
@@ -265,13 +277,57 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
     }
   }, [isClient])
 
+  // Efecto para detectar cambios en el token (polling cada 2 segundos)
+  useEffect(() => {
+    if (!isClient) return
+
+    const checkTokenChanges = () => {
+      const currentToken = localStorage.getItem("auth_token")
+
+      // Si el token cambió (de null a algo, o de algo a null, o cambió de valor)
+      if (currentToken !== lastToken) {
+        console.log("🔄 Cambio de token detectado:", {
+          anterior: lastToken ? "existe" : "null",
+          actual: currentToken ? "existe" : "null",
+        })
+
+        setLastToken(currentToken)
+
+        // Si hay un nuevo token, cargar estadísticas
+        if (currentToken) {
+          console.log("🔑 Nuevo token detectado, cargando estadísticas...")
+          setTimeout(() => {
+            loadStatsFromAPI()
+          }, 500)
+        } else {
+          // Si no hay token, resetear estadísticas
+          console.log("🔒 Token removido, reseteando estadísticas...")
+          setStats({
+            licenciasEmitidas: 0,
+            licenciasVencidas: 0,
+            titularesRegistrados: 0,
+          })
+          setIsLoading(false)
+        }
+      }
+    }
+
+    // Verificar inmediatamente
+    checkTokenChanges()
+
+    // Verificar cada 2 segundos
+    const interval = setInterval(checkTokenChanges, 2000)
+
+    return () => clearInterval(interval)
+  }, [isClient, lastToken])
+
   // Escuchar cambios en el localStorage (cuando el usuario se loguea)
   useEffect(() => {
     if (!isClient) return
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "auth_token") {
-        console.log("🔄 Token de autenticación cambió, recargando estadísticas...")
+        console.log("🔄 Storage event: Token de autenticación cambió")
         setTimeout(() => {
           loadStatsFromAPI()
         }, 500)
@@ -283,7 +339,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
 
     // También escuchar eventos personalizados para cambios en la misma pestaña
     const handleAuthChange = () => {
-      console.log("🔄 Evento de autenticación detectado, recargando estadísticas...")
+      console.log("🔄 Custom event: Evento de autenticación detectado")
       setTimeout(() => {
         loadStatsFromAPI()
       }, 500)
@@ -322,12 +378,7 @@ export const StatsProvider = ({ children }: StatsProviderProps) => {
   // Función para refrescar todas las estadísticas
   const refreshStats = async () => {
     console.log("🔄 Refrescando estadísticas manualmente...")
-    if (isClient && isUserAuthenticated()) {
-      await loadStatsFromAPI()
-    } else {
-      console.log("📁 Usuario no autenticado, cargando datos locales...")
-      loadStatsFromLocalData()
-    }
+    await loadStatsFromAPI()
   }
 
   // Valor del contexto
