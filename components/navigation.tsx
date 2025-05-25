@@ -23,7 +23,24 @@ export default function Navigation({ role }: NavigationProps) {
   }, [])
 
   const handleLogout = () => {
-    router.push("/")
+    console.log("🔄 Iniciando logout...")
+
+    // Limpiar TODAS las claves posibles del localStorage
+    localStorage.removeItem("auth_token")
+    localStorage.removeItem("authToken")
+    localStorage.removeItem("user_data")
+    localStorage.removeItem("userData")
+    localStorage.removeItem("userRole")
+    localStorage.removeItem("userEmail")
+    localStorage.removeItem("currentUser")
+
+    // Limpiar también sessionStorage por si acaso
+    sessionStorage.clear()
+
+    console.log("✅ LocalStorage limpiado")
+
+    // Forzar recarga de la página para limpiar cualquier estado en memoria
+    window.location.href = "/"
   }
 
   const toggleTheme = () => {

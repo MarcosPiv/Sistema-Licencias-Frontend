@@ -21,6 +21,7 @@ import {
 import Navigation from "@/components/navigation"
 import gsap from "gsap"
 import { useStats } from "@/contexts/stats-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function Dashboard() {
   const searchParams = useSearchParams()
@@ -30,6 +31,10 @@ export default function Dashboard() {
 
   // Usar el contexto de estadísticas
   const { stats, isLoading } = useStats()
+
+  // Hook de autenticación para logout
+  const { logout } = useAuth()
+
   const { licenciasEmitidas, licenciasVencidas, titularesRegistrados } = stats
 
   // Referencias para animaciones GSAP
@@ -226,9 +231,18 @@ export default function Dashboard() {
     router.push(`/dashboard/operadores?role=${role}`)
   }
 
+  // Función para manejar el logout
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <Navigation role={role} />
+      <Navigation role={role} onLogout={handleLogout} />
 
       <main className="container mx-auto py-8 px-4">
         <h1 ref={titleRef} className="text-3xl font-bold mb-6 text-slate-800 dark:text-white">
