@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { handleSessionExpired, isTokenExpired } from "@/utils/session-handler"
 import { Loader2 } from "lucide-react"
 
 interface AuthGuardProps {
@@ -17,7 +18,26 @@ export default function AuthGuard({ children, requireAuth = true, redirectTo = "
   const pathname = usePathname()
 
   useEffect(() => {
-    // No hacer nada mientras está cargando
+    // Verificar inmediatamente si el token está expirado
+    if (requireAuth && typeof window !== "undefined") {
+      const token = localStorage.getItem("auth_token")
+
+      // Si no hay token, redirigir a session-expired
+      if (!token) {
+        console.log("🚫 No hay token - Redirigiendo a session-expired")
+        handleSessionExpired()
+        return
+      }
+
+      // Si hay token, verificar si está expirado
+      if (isTokenExpired(token)) {
+        console.log("⏰ Token expirado - Redirigiendo a session-expired")
+        handleSessionExpired()
+        return
+      }
+    }
+
+    // No hacer nada más mientras está cargando
     if (isLoading) return
 
     console.log("🛡️ AuthGuard - Estado:", {
@@ -30,12 +50,7 @@ export default function AuthGuard({ children, requireAuth = true, redirectTo = "
     // Si requiere autenticación pero no está autenticado
     if (requireAuth && !isAuthenticated) {
       console.log("🚫 Acceso denegado - Redirigiendo a sesión expirada")
-
-      // Obtener el último email usado si existe
-      const lastEmail = user?.mail || ""
-      const redirectUrl = lastEmail ? `/session-expired?email=${encodeURIComponent(lastEmail)}` : "/session-expired"
-
-      router.push(redirectUrl)
+      handleSessionExpired()
       return
     }
 
@@ -66,7 +81,7 @@ export default function AuthGuard({ children, requireAuth = true, redirectTo = "
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-amber-600" />
-          <p className="text-slate-600 dark:text-slate-400">Redirigiendo...</p>
+          <p className="text-slate-600 dark:text-slate-400">Verificando sesión...</p>
         </div>
       </div>
     )

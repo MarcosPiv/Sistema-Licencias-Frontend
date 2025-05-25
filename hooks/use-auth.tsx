@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { authService } from "@/services/auth-service"
+import { isTokenExpired } from "@/utils/session-handler"
 
 interface User {
   id: number
@@ -40,20 +41,17 @@ export function useAuth(): UseAuthReturn {
         return false
       }
 
-      // Verificar si el token no ha expirado
-      const payload = JSON.parse(atob(token.split(".")[1]))
-      const currentTime = Date.now() / 1000
-
-      if (payload.exp <= currentTime) {
+      // Verificar si el token está expirado
+      if (isTokenExpired(token)) {
         console.log("⏰ Token expirado")
-        localStorage.removeItem("auth_token")
-        localStorage.removeItem("user_data")
         setUser(null)
         setIsAuthenticated(false)
+        // No limpiar aquí, dejar que AuthGuard maneje la redirección
         return false
       }
 
       // Token válido, extraer información del usuario
+      const payload = JSON.parse(atob(token.split(".")[1]))
       const userData = {
         id: payload.sub || 0,
         nombre: payload.nombre || "",
@@ -68,8 +66,6 @@ export function useAuth(): UseAuthReturn {
       return true
     } catch (error) {
       console.error("❌ Error al verificar autenticación:", error)
-      localStorage.removeItem("auth_token")
-      localStorage.removeItem("user_data")
       setUser(null)
       setIsAuthenticated(false)
       return false
