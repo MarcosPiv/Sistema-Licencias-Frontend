@@ -37,6 +37,7 @@ export default function LoginForm() {
   const tooltipRefs = useRef<(HTMLDivElement | null)[]>([])
   const passwordToggleRef = useRef<HTMLButtonElement>(null)
   const recoveryInfoRef = useRef<HTMLDivElement>(null)
+  const errorMessageRef = useRef<HTMLDivElement>(null)
 
   // Información del equipo de desarrollo con nombres completos
   const teamMembers = [
@@ -224,18 +225,38 @@ export default function LoginForm() {
       gsap.fromTo(
         recoveryInfoRef.current,
         { height: 0, opacity: 0, y: -10 },
-        { height: "auto", opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
+        { height: "auto", opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
       )
     } else {
       gsap.to(recoveryInfoRef.current, {
         height: 0,
         opacity: 0,
         y: -10,
-        duration: 0.2,
+        duration: 0.3,
         ease: "power2.in",
       })
     }
   }, [showRecoveryInfo])
+
+  const handleRecoveryClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+
+    // Animar la salida del mensaje de error
+    if (errorMessageRef.current) {
+      gsap.to(errorMessageRef.current, {
+        opacity: 0,
+        y: -10,
+        scale: 0.95,
+        duration: 0.3,
+        ease: "power2.in",
+        onComplete: () => {
+          // Limpiar el error y mostrar la información de recuperación
+          setError("")
+          setShowRecoveryInfo(true)
+        },
+      })
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -319,6 +340,9 @@ export default function LoginForm() {
           setError(errorMessage)
         }
 
+        // Ocultar información de recuperación si estaba visible
+        setShowRecoveryInfo(false)
+
         // Animación de error
         gsap.fromTo(formRef.current, { x: -10 }, { x: 10, duration: 0.1, repeat: 5, yoyo: true })
 
@@ -380,18 +404,18 @@ export default function LoginForm() {
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-slate-900 dark:bg-slate-950 border-2 border-red-500 rounded-lg p-4 flex items-center gap-3">
+            <div
+              ref={errorMessageRef}
+              className="bg-slate-900 dark:bg-slate-950 border-2 border-red-500 rounded-lg p-4 flex items-center gap-3"
+            >
               <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
               <div className="flex-1">
                 <p className="text-red-500 text-sm font-medium">{error}</p>
                 {loginAttempts >= 3 && (
                   <Button
                     variant="link"
-                    className="p-0 h-auto text-xs text-red-400 underline mt-1"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setShowRecoveryInfo(!showRecoveryInfo)
-                    }}
+                    className="p-0 h-auto text-xs text-red-400 underline mt-1 hover:text-red-300 transition-colors"
+                    onClick={handleRecoveryClick}
                   >
                     Recuperar acceso
                   </Button>
@@ -492,12 +516,6 @@ export default function LoginForm() {
             <span className="relative z-10">{loading ? "Iniciando sesión..." : "Iniciar Sesión"}</span>
             <span className="absolute inset-0 bg-gradient-to-r from-blue-500 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
           </Button>
-
-          <div className="text-sm text-center text-slate-500 mt-4">
-            <p>Para fines de demostración:</p>
-            <p>Admin: admin@municipio.gob / admin123</p>
-            <p>Operador: operador@municipio.gob / operador123</p>
-          </div>
 
           <div className="mt-8 pt-4 border-t dark:border-slate-700" ref={teamSectionRef}>
             <p className="text-center text-sm text-slate-500 dark:text-slate-400 mb-3">Equipo de Desarrollo</p>
