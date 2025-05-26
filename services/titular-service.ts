@@ -43,7 +43,6 @@ export interface TitularStats {
 
 // URL base de la API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.sistema-licencias.gob.ar"
-
 // Función para obtener los headers de autenticación
 const getAuthHeaders = () => {
   const token = localStorage.getItem("auth_token")
@@ -276,6 +275,7 @@ export const titularService = {
 
   // Crear un nuevo titular
   crearTitular: async (datos: Omit<Titular, "id" | "fechaAlta">): Promise<TitularResponse> => {
+    
     const token = localStorage.getItem("auth_token")
     if (!token) {
       return {
@@ -308,7 +308,7 @@ export const titularService = {
         nombre: nombre,
         apellido: apellidoCompleto || apellido,
         fechaNacimiento: datos.fechaNacimiento,
-        tipoDocumento: datos.tipoDocumento,
+        tipoDocumento: datos.tipoDocumento.toUpperCase(), // Asegurarse de que el tipo de documento esté en mayúsculas
         numeroDocumento: datos.numeroDocumento,
         grupoSanguineo: datos.grupoSanguineo,
         factorRh: factorRhValido,
@@ -395,7 +395,7 @@ export const titularService = {
       // Transformar la respuesta del backend al formato esperado por el frontend
       const titularCreado: Titular = {
         id: responseData.id,
-        tipoDocumento: responseData.tipoDocumento,
+        tipoDocumento: responseData.tipoDocumento.toUpperCase(), // Asegurarse de que el tipo de documento esté en mayúsculas
         numeroDocumento: responseData.numeroDocumento,
         nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
         fechaNacimiento: responseData.fechaNacimiento,

@@ -62,7 +62,8 @@ export default function LoginForm() {
     {
       username: "MateoBlanche",
       fullName: "Mateo Blanche",
-      github: "https://github.com/MateoBlanche.png",
+      github: "https://github.com/MateoBlanche",
+      avatar: "https://github.com/MateoBlanche.png",
     },
     {
       username: "Seba02-sr",
