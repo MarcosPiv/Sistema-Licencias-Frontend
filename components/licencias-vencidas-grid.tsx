@@ -54,45 +54,61 @@ export default function LicenciasVencidasGrid({ role }: { role: string | null })
 
   const tableRef = useRef<HTMLDivElement>(null)
 
-  // Reemplazar el useEffect que filtra las licencias vencidas con:
+// Reemplazar el bloque de useEffect que carga las licencias vencidas (aproximadamente línea 42-71):
+useEffect(() => {
+  const cargarLicenciasVencidas = async () => {
+    try {
+      const response = await licenciaService.obtenerLicenciasVencidas()
 
-  useEffect(() => {
-    const cargarLicenciasVencidas = async () => {
-      try {
-        const response = await licenciaService.obtenerLicenciasVencidas()
+      if (response.success) {
+        // Calcular días vencidos para cada licencia usando el mismo enfoque 
+        // que en formatDate para evitar problemas de zona horaria
+        const hoy = new Date()
+        const licenciasConDias = response.licencias.map((licencia) => {
+          // Usar el mismo método para crear la fecha de vencimiento
+          const [year, month, day] = licencia.fechaVencimiento.split("-").map(Number)
+          const fechaVencimiento = new Date(year, month - 1, day)
+          
+          // Normalizar las fechas para que representen el inicio del día
+          const hoyNormalizado = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+          
+          // Calcular la diferencia en milisegundos y convertir a días
+          const diasVencida = Math.floor(
+            (hoyNormalizado.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24)
+          )
+          
+          return { ...licencia, diasVencida }
+        })
 
-        if (response.success) {
-          // Calcular días vencidos para cada licencia
-          const hoy = new Date()
-          const licenciasConDias = response.licencias.map((licencia) => {
-            const fechaVencimiento = new Date(licencia.fechaVencimiento)
-            const diasVencida = Math.floor((hoy.getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24))
-            return { ...licencia, diasVencida }
-          })
-
-          setLicenciasVencidas(licenciasConDias)
-        } else {
-          console.error("Error al cargar licencias vencidas:", response.message)
-          // En caso de error, mantener array vacío
-          setLicenciasVencidas([])
-        }
-      } catch (error) {
-        console.error("Error al cargar licencias vencidas:", error)
+        setLicenciasVencidas(licenciasConDias)
+      } else {
+        console.error("Error al cargar licencias vencidas:", response.message)
         setLicenciasVencidas([])
       }
-
-      // Animación de entrada
-      if (tableRef.current) {
-        gsap.fromTo(tableRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" })
-      }
+    } catch (error) {
+      console.error("Error al cargar licencias vencidas:", error)
+      setLicenciasVencidas([])
     }
 
-    cargarLicenciasVencidas()
-  }, [])
+    // Animación de entrada
+    if (tableRef.current) {
+      gsap.fromTo(
+        tableRef.current, 
+        { opacity: 0, y: 20 }, 
+        { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }
+      )
+    }
+  }
 
-  // Función para formatear fechas
+  cargarLicenciasVencidas()
+}, [])
+
+  // Función para formatear fechas corregida
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    // Crear la fecha directamente desde los componentes para evitar problemas de zona horaria
+    const [year, month, day] = dateString.split("-").map(Number)
+    const date = new Date(year, month - 1, day) // month - 1 porque los meses en JS van de 0-11
+
     return date.toLocaleDateString("es-AR", {
       day: "2-digit",
       month: "2-digit",

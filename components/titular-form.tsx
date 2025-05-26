@@ -22,7 +22,8 @@ import { useStats } from "@/contexts/stats-context"
 // Modificar el esquema base para eliminar claseSolicitada
 const baseSchema = {
   tipoDocumento: z.string().min(1, "Seleccione un tipo de documento"),
-  nombreApellido: z.string().min(3, "Ingrese nombre y apellido completos"),
+  nombre: z.string().min(2, "Ingrese el nombre completo"),
+  apellido: z.string().min(2, "Ingrese el apellido completo"),
   fechaNacimiento: z
     .string()
     .min(1, "Seleccione una fecha de nacimiento")
@@ -40,10 +41,10 @@ const baseSchema = {
           edad--
         }
 
-        return edad >= 17 // Cambiado de 18 a 17 años
+        return edad >= 17
       },
       {
-        message: "El titular debe tener al menos 17 años", // Actualizado el mensaje de error
+        message: "El titular debe tener al menos 17 años",
       },
     ),
   direccion: z.string().min(5, "Ingrese una dirección válida"),
@@ -79,7 +80,8 @@ export default function TitularForm({ role }: TitularFormProps) {
     defaultValues: {
       tipoDocumento: "",
       numeroDocumento: "",
-      nombreApellido: "",
+      nombre: "",
+      apellido: "",
       fechaNacimiento: "",
       direccion: "",
       grupoSanguineo: "",
@@ -201,16 +203,20 @@ export default function TitularForm({ role }: TitularFormProps) {
       // Si llegamos aquí, el titular no existe, proceder a crearlo
       console.log("Titular no existe, procediendo a crear...")
 
-      const response = await titularService.crearTitular({
-        tipoDocumento: values.tipoDocumento,
-        numeroDocumento: values.numeroDocumento,
-        nombreApellido: values.nombreApellido,
+      // Preparar los datos en el formato que espera el backend
+      const datosParaBackend = {
+        nombre: values.nombre,
+        apellido: values.apellido,
         fechaNacimiento: values.fechaNacimiento,
-        direccion: values.direccion,
+        tipoDocumento: values.tipoDocumento.toUpperCase(),
+        numeroDocumento: values.numeroDocumento,
         grupoSanguineo: values.grupoSanguineo,
-        factorRh: values.factorRh,
-        donanteOrganos: values.donanteOrganos,
-      })
+        factorRh: values.factorRh === "+" ? "POSITIVO" : "NEGATIVO",
+        direccion: values.direccion,
+        donanteOrganos: values.donanteOrganos === "Si" || values.donanteOrganos === "Sí",
+      }
+
+      const response = await titularService.crearTitular(datosParaBackend)
 
       if (response.success) {
         console.log("Titular creado exitosamente:", response.titular)
@@ -347,19 +353,35 @@ export default function TitularForm({ role }: TitularFormProps) {
                     />
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="nombreApellido"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre y Apellido *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nombre y apellido completos" maxLength={50} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="nombre"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nombre completo" maxLength={30} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="apellido"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Apellido *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Apellido completo" maxLength={30} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField

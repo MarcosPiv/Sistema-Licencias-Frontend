@@ -3,7 +3,9 @@ export interface Titular {
   id: number
   tipoDocumento: string
   numeroDocumento: string
-  nombreApellido: string
+  nombre: string
+  apellido: string
+  nombreApellido: string // Mantener para compatibilidad
   fechaNacimiento: string
   direccion: string
   grupoSanguineo: string
@@ -41,8 +43,22 @@ export interface TitularStats {
   nuevosUltimos30Dias: number
 }
 
+// Interfaz para los datos que vienen del formulario
+interface DatosFormulario {
+  nombre: string
+  apellido: string
+  fechaNacimiento: string
+  tipoDocumento: string
+  numeroDocumento: string
+  grupoSanguineo: string
+  factorRh: string
+  direccion: string
+  donanteOrganos: boolean
+}
+
 // URL base de la API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.sistema-licencias.gob.ar"
+
 // Función para obtener los headers de autenticación
 const getAuthHeaders = () => {
   const token = localStorage.getItem("auth_token")
@@ -248,6 +264,8 @@ export const titularService = {
         id: titularData.id,
         tipoDocumento: titularData.tipoDocumento,
         numeroDocumento: titularData.numeroDocumento,
+        nombre: titularData.nombre,
+        apellido: titularData.apellido,
         nombreApellido: `${titularData.nombre} ${titularData.apellido}`,
         fechaNacimiento: titularData.fechaNacimiento,
         direccion: titularData.direccion,
@@ -274,8 +292,7 @@ export const titularService = {
   },
 
   // Crear un nuevo titular
-  crearTitular: async (datos: Omit<Titular, "id" | "fechaAlta">): Promise<TitularResponse> => {
-    
+  crearTitular: async (datos: DatosFormulario): Promise<TitularResponse> => {
     const token = localStorage.getItem("auth_token")
     if (!token) {
       return {
@@ -286,43 +303,13 @@ export const titularService = {
     }
 
     try {
-      // Transformar los datos para adaptarlos al formato esperado por el backend
-      const [nombre, apellido] = datos.nombreApellido.split(" ", 2)
-      const apellidoCompleto = datos.nombreApellido.substring(nombre.length + 1)
-
-      // Procesar el factor Rh para siempre enviar el formato correcto al backend
-      const factorRhMayus = datos.factorRh.toUpperCase()
-      const factorRhValido =
-        factorRhMayus === "POSITIVO" || factorRhMayus === "+" || datos.factorRh === "+" ? "POSITIVO" : "NEGATIVO"
-
-      // Procesar donante de órganos - CORREGIDO
-      const esDonanteOrganos =
-        datos.donanteOrganos === "Si" ||
-        datos.donanteOrganos === "SI" ||
-        datos.donanteOrganos === "si" ||
-        datos.donanteOrganos === "Sí" ||
-        datos.donanteOrganos === "SÍ" ||
-        datos.donanteOrganos === "sí"
-
-      const datosParaEnviar = {
-        nombre: nombre,
-        apellido: apellidoCompleto || apellido,
-        fechaNacimiento: datos.fechaNacimiento,
-        tipoDocumento: datos.tipoDocumento.toUpperCase(), // Asegurarse de que el tipo de documento esté en mayúsculas
-        numeroDocumento: datos.numeroDocumento,
-        grupoSanguineo: datos.grupoSanguineo,
-        factorRh: factorRhValido,
-        direccion: datos.direccion,
-        donanteOrganos: esDonanteOrganos,
-      }
-
       console.log("=== CREAR TITULAR ===")
-      console.log("📤 Enviando al backend:", JSON.stringify(datosParaEnviar, null, 2))
+      console.log("📤 Enviando al backend:", JSON.stringify(datos, null, 2))
 
       const response = await fetch(`${API_URL}/titulares`, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify(datosParaEnviar),
+        body: JSON.stringify(datos),
       })
 
       console.log("📥 Status de respuesta:", response.status)
@@ -395,14 +382,16 @@ export const titularService = {
       // Transformar la respuesta del backend al formato esperado por el frontend
       const titularCreado: Titular = {
         id: responseData.id,
-        tipoDocumento: responseData.tipoDocumento.toUpperCase(), // Asegurarse de que el tipo de documento esté en mayúsculas
+        tipoDocumento: responseData.tipoDocumento,
         numeroDocumento: responseData.numeroDocumento,
+        nombre: responseData.nombre,
+        apellido: responseData.apellido,
         nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
         fechaNacimiento: responseData.fechaNacimiento,
         direccion: responseData.direccion,
         grupoSanguineo: responseData.grupoSanguineo,
-        factorRh: responseData.factorRh === "POSITIVO" ? "positivo" : "negativo",
-        donanteOrganos: responseData.donanteOrganos ? "si" : "no",
+        factorRh: responseData.factorRh === "POSITIVO" ? "+" : "-",
+        donanteOrganos: responseData.donanteOrganos ? "Si" : "No",
         fechaAlta: new Date().toISOString().split("T")[0],
       }
 
