@@ -17,6 +17,7 @@ import * as z from "zod"
 import gsap from "gsap"
 import type { Titular } from "@/services/titular-service"
 import { useToast } from "@/hooks/use-toast"
+import { titularService } from "@/services/titular-service"
 
 // Esquema para el formulario de búsqueda
 const busquedaSchema = z.object({
@@ -28,7 +29,8 @@ const busquedaSchema = z.object({
 const formSchema = z.object({
   tipoDocumento: z.string().min(1, "Seleccione un tipo de documento"),
   numeroDocumento: z.string().min(1, "Ingrese un número de documento"),
-  nombreApellido: z.string().min(3, "Ingrese nombre y apellido completos"),
+  nombre: z.string().min(2, "Ingrese un nombre válido"),
+  apellido: z.string().min(2, "Ingrese un apellido válido"),
   fechaNacimiento: z
     .string()
     .min(1, "Seleccione una fecha de nacimiento")
@@ -89,7 +91,8 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
     defaultValues: {
       tipoDocumento: "",
       numeroDocumento: "",
-      nombreApellido: "",
+      nombre: "",
+      apellido: "",
       fechaNacimiento: "",
       direccion: "",
       grupoSanguineo: "",
@@ -156,7 +159,7 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
     }
   }, [titularEncontrado])
 
-  const buscarTitular = async (values: z.infer<typeof busquedaSchema>) => {
+    const buscarTitular = async (values: z.infer<typeof busquedaSchema>) => {
     console.log("Iniciando búsqueda de titular:", values)
     setBuscando(true)
     setError(null)
@@ -167,40 +170,33 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
         throw new Error("Para DNI solo se permiten números")
       }
 
-      // Simulación de datos para demostración
-      // En un entorno real, esto sería reemplazado por la llamada al servicio real
-      const titularSimulado: Titular = {
-        id: 1,
-        tipoDocumento: values.tipoDocumento,
-        numeroDocumento: values.numeroDocumento,
-        nombreApellido: values.tipoDocumento === "DNI" ? "Juan Pérez" : "María González",
-        fechaNacimiento: "1985-06-15",
-        direccion: "Av. Siempre Viva 742",
-        grupoSanguineo: "A",
-        factorRh: "+",
-        donanteOrganos: "Si",
-        fechaAlta: "2022-01-15",
+      // Llamar al servicio para buscar el titular
+      const { success, message, titular } = await titularService.obtenerTitularPorDocumento(
+        values.tipoDocumento,
+        values.numeroDocumento
+      )
+
+      if (!success) {
+        throw new Error(message || "No se encontró el titular con los datos proporcionados")
       }
 
-      // Simular un pequeño retraso para mostrar el estado de carga
-      await new Promise((resolve) => setTimeout(resolve, 800))
-
-      console.log("Titular encontrado:", titularSimulado)
-      setTitularEncontrado(titularSimulado)
+      console.log("Titular encontrado:", titular)
+      setTitularEncontrado(titular)
 
       // Cargar los datos en el formulario de modificación
       form.reset({
-        tipoDocumento: titularSimulado.tipoDocumento,
-        numeroDocumento: titularSimulado.numeroDocumento,
-        nombreApellido: titularSimulado.nombreApellido,
-        fechaNacimiento: titularSimulado.fechaNacimiento,
-        direccion: titularSimulado.direccion,
-        grupoSanguineo: titularSimulado.grupoSanguineo,
-        factorRh: titularSimulado.factorRh,
-        donanteOrganos: titularSimulado.donanteOrganos,
+        tipoDocumento: titular.tipoDocumento,
+        numeroDocumento: titular.numeroDocumento,
+        nombre: titular.nombre || "",
+        apellido: titular.apellido || "",
+        fechaNacimiento: titular.fechaNacimiento,
+        direccion: titular.direccion,
+        grupoSanguineo: titular.grupoSanguineo,
+        factorRh: titular.factorRh,
+        donanteOrganos: titular.donanteOrganos,
       })
 
-      setTipoDocumento(titularSimulado.tipoDocumento)
+      setTipoDocumento(titular.tipoDocumento)
 
       toast({
         title: "Titular encontrado",
@@ -219,7 +215,7 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
       setBuscando(false)
     }
   }
-
+  
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     // Validar manualmente el número de documento
     if (!validateNumeroDocumento(values.numeroDocumento)) {
@@ -228,10 +224,30 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
 
     setGuardando(true)
     try {
-      // Simular actualización del titular
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      
+      const datosActualizados = {
+        nombre: values.nombre.trim(),
+        apellido: values.apellido.trim(),
+        fechaNacimiento: values.fechaNacimiento,
+        grupoSanguineo: values.grupoSanguineo, // Ya es "O", "A", "B" o "AB" directamente
+        factorRh: values.factorRh === "+" ? "POSITIVO" : "NEGATIVO",
+        direccion: values.direccion,
+        donanteOrganos: values.donanteOrganos === "Si"
+      };
 
-      // Simulación de éxito
+      console.log("Datos a enviar:", datosActualizados);
+
+      // Llamar al servicio para actualizar el titular
+      const { success, message } = await titularService.actualizarTitularPorDocumento(
+        values.tipoDocumento,
+        values.numeroDocumento,
+        datosActualizados
+      );
+
+      if (!success) {
+        throw new Error(message || "Error al actualizar el titular")
+      }
+
       setSuccess(true)
       toast({
         title: "Éxito",
@@ -246,7 +262,7 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
       console.error("Error al actualizar titular:", error)
       toast({
         title: "Error",
-        description: "Ocurrió un error al actualizar el titular",
+        description: error instanceof Error ? error.message : "Ocurrió un error al actualizar el titular",
         variant: "destructive",
       })
     } finally {
@@ -425,19 +441,35 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
                     />
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="nombreApellido"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre y Apellido *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nombre y apellido completos" maxLength={50} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="nombre"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nombre" maxLength={30} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="apellido"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Apellido *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Apellido" maxLength={30} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
@@ -483,7 +515,7 @@ export default function ModificarTitularForm({ role }: ModificarTitularFormProps
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="O">O</SelectItem>
                               <SelectItem value="A">A</SelectItem>
                               <SelectItem value="B">B</SelectItem>
                               <SelectItem value="AB">AB</SelectItem>

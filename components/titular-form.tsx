@@ -427,7 +427,7 @@ export default function TitularForm({ role }: TitularFormProps) {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="O">O</SelectItem>
                               <SelectItem value="A">A</SelectItem>
                               <SelectItem value="B">B</SelectItem>
                               <SelectItem value="AB">AB</SelectItem>

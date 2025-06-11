@@ -453,33 +453,68 @@ export const titularService = {
     datos: Partial<Omit<Titular, "id" | "tipoDocumento" | "numeroDocumento" | "fechaAlta">>,
   ): Promise<TitularResponse> => {
     try {
-      const response = await fetch(`${API_URL}/titulares/documento?tipo=${tipoDocumento}&numero=${numeroDocumento}`, {
+      // Convertir el tipo de documento a mayúsculas para la API
+      const tipoDocumentoAPI = tipoDocumento.toUpperCase();
+      
+      // CAMBIO: URL corregida según la que funciona en Postman
+      const url = `${API_URL}/titulares?tipoDocumento=${tipoDocumentoAPI}&numeroDocumento=${numeroDocumento}`;
+      
+      // CAMBIO: Incluir tipoDocumento y numeroDocumento en el cuerpo también
+      const datosCompletos = {
+        ...datos,
+        tipoDocumento: tipoDocumentoAPI,
+        numeroDocumento: numeroDocumento
+      };
+
+      const response = await fetch(url, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify(datos),
-      })
+        body: JSON.stringify(datosCompletos),
+      });
 
       if (handleAuthError(response.status)) {
         return {
           success: false,
           message: "Sesión expirada",
           titular: {} as Titular,
-        }
+        };
       }
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
+        const errorText = await response.text();
+        throw new Error(`Error ${response.status}: ${errorText}`);
       }
 
-      return await response.json()
+      const responseData = await response.json();
+      
+      // Transformar la respuesta del backend al formato esperado por el frontend
+      const titularActualizado: Titular = {
+        id: responseData.id,
+        tipoDocumento: responseData.tipoDocumento,
+        numeroDocumento: responseData.numeroDocumento,
+        nombre: responseData.nombre,
+        apellido: responseData.apellido,
+        nombreApellido: `${responseData.nombre} ${responseData.apellido}`,
+        fechaNacimiento: responseData.fechaNacimiento,
+        direccion: responseData.direccion,
+        grupoSanguineo: responseData.grupoSanguineo,
+        factorRh: responseData.factorRh === "POSITIVO" ? "+" : "-",
+        donanteOrganos: responseData.donanteOrganos ? "Si" : "No",
+        fechaAlta: responseData.fechaAlta,
+      };
+
+      return {
+        success: true,
+        message: "Titular actualizado correctamente",
+        titular: titularActualizado,
+      };
     } catch (error) {
-      console.error(`Error al actualizar titular con documento ${tipoDocumento} ${numeroDocumento}:`, error)
+      console.error(`Error al actualizar titular con documento ${tipoDocumento} ${numeroDocumento}:`, error);
       return {
         success: false,
         message: error instanceof Error ? error.message : "Error desconocido al actualizar titular",
         titular: {} as Titular,
-      }
+      };
     }
   },
 
