@@ -4,14 +4,28 @@ import { useSearchParams } from "next/navigation"
 import { useRouter } from "next/navigation"
 import Navigation from "@/components/navigation"
 import ModificarTitularForm from "@/components/modificar-titular-form"
+import { useEffect } from "react"
 
 export default function ModificarTitularPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const role = searchParams.get("role")
 
+  useEffect(() => {
+    // Verificar si el usuario tiene permisos para acceder a esta página
+    if (role !== "ADMIN" && role !== "SUPER_USER") {
+      console.log("Acceso no autorizado a Modificar Titular. Redirigiendo...")
+      router.push(`/dashboard?role=${role}`)
+    }
+  }, [role, router])
+
   if (!role) {
     router.push("/")
+    return null
+  }
+
+  // Si el rol no es ADMIN o SUPER_USER, no renderizar el contenido
+  if (role !== "ADMIN" && role !== "SUPER_USER") {
     return null
   }
 

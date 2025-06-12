@@ -240,6 +240,9 @@ export default function Dashboard() {
     }
   }
 
+  // Verificar si el usuario es administrador
+  const isAdmin = role === "ADMIN"
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <Navigation role={role} onLogout={handleLogout} />
@@ -340,14 +343,18 @@ export default function Dashboard() {
                 <UserCircle className="h-5 w-5" />
                 <span>Alta de Titular</span>
               </Button>
-              <Button
-                className="w-full flex items-center justify-center gap-2 h-12 hover:scale-105 transition-transform duration-200"
-                variant="outline"
-                onClick={() => navigateTo("/dashboard/titulares/modificar")}
-              >
-                <UserCheck className="h-5 w-5" />
-                <span>Modificar Titular</span>
-              </Button>
+
+              {/* Botón de Modificar Titular - solo visible para administradores */}
+              {isAdmin && (
+                <Button
+                  className="w-full flex items-center justify-center gap-2 h-12 hover:scale-105 transition-transform duration-200"
+                  variant="outline"
+                  onClick={() => navigateTo("/dashboard/titulares/modificar")}
+                >
+                  <UserCheck className="h-5 w-5" />
+                  <span>Modificar Titular</span>
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -408,7 +415,7 @@ export default function Dashboard() {
           </Card>
 
           {/* Tarjeta de Gestión de Operadores (solo visible para administradores) */}
-          {role === "ADMIN" && (
+          {isAdmin && (
             <Card className="hover:shadow-md dark:border-slate-700 hover:scale-105 transition-all duration-300">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xl">Gestión de Operadores</CardTitle>

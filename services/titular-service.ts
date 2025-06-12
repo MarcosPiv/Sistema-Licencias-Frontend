@@ -410,42 +410,6 @@ export const titularService = {
     }
   },
 
-  // Actualizar un titular existente
-  actualizarTitular: async (
-    id: number,
-    datos: Partial<Omit<Titular, "id" | "fechaAlta">>,
-  ): Promise<TitularResponse> => {
-    try {
-      const response = await fetch(`${API_URL}/titulares/${id}`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(datos),
-      })
-
-      if (handleAuthError(response.status)) {
-        return {
-          success: false,
-          message: "Sesión expirada",
-          titular: {} as Titular,
-        }
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Error ${response.status}: ${response.statusText || errorText}`)
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error(`Error al actualizar titular con ID ${id}:`, error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : "Error desconocido al actualizar titular",
-        titular: {} as Titular,
-      }
-    }
-  },
-
   // Actualizar un titular por tipo y número de documento
   actualizarTitularPorDocumento: async (
     tipoDocumento: string,
