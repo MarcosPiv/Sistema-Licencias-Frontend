@@ -14,8 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
-import { titularesDB } from "@/data/titular-data"
-import { licenciasEmitidas } from "@/data/licencia-data"
+import { filtrosService, type TitularConLicencia } from "@/services/filtros-service"
 import gsap from "gsap"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -31,10 +30,11 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
   const [factorRh, setFactorRh] = useState<string>("")
   const [soloDonanteOrganos, setSoloDonanteOrganos] = useState<boolean>(false)
   const [nombreApellido, setNombreApellido] = useState<string>("")
-  const [resultados, setResultados] = useState<any[]>([])
+  const [resultados, setResultados] = useState<TitularConLicencia[]>([])
   const [busquedaRealizada, setBusquedaRealizada] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isExporting, setIsExporting] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
 
   const formRef = useRef<HTMLDivElement>(null)
   const filtrosRef = useRef<HTMLDivElement>(null)
@@ -59,56 +59,23 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
   }
 
   // Buscar titulares según los filtros
-  const buscarTitulares = () => {
+  const buscarTitulares = async () => {
     setIsLoading(true)
     setBusquedaRealizada(true)
+    setError(null)
 
-    // Simular una pequeña demora para mostrar el estado de carga
-    setTimeout(() => {
-      // Filtrar titulares según los criterios seleccionados
-      let titularesFiltrados = [...titularesDB]
-
-      // Filtrar por nombre o apellido si se ha ingresado texto
-      if (nombreApellido.trim()) {
-        const searchTerm = nombreApellido.toLowerCase().trim()
-        titularesFiltrados = titularesFiltrados.filter((titular) =>
-          titular.nombreApellido.toLowerCase().includes(searchTerm),
-        )
+    try {
+      // Preparar los filtros para el servicio
+      const filtros = {
+        nombreApellido,
+        gruposSanguineos: gruposSanguineos,
+        factorRh,
+        soloDonanteOrganos,
       }
 
-      // Filtrar por grupo sanguíneo si hay alguno seleccionado
-      if (gruposSanguineos.length > 0) {
-        titularesFiltrados = titularesFiltrados.filter((titular) => gruposSanguineos.includes(titular.grupoSanguineo))
-      }
-
-      // Filtrar por factor RH si está seleccionado
-      if (factorRh) {
-        titularesFiltrados = titularesFiltrados.filter((titular) => titular.factorRh === factorRh)
-      }
-
-      // Filtrar solo donantes si está marcado
-      if (soloDonanteOrganos) {
-        titularesFiltrados = titularesFiltrados.filter((titular) => titular.donanteOrganos === "Si")
-      }
-
-      // Obtener licencias vigentes para cada titular
-      const resultadosConLicencia = titularesFiltrados.map((titular) => {
-        // Buscar licencia vigente para este titular
-        const licencia = licenciasEmitidas.find(
-          (lic) =>
-            lic.titular.tipoDocumento === titular.tipoDocumento &&
-            lic.titular.numeroDocumento === titular.numeroDocumento &&
-            new Date(lic.fechaVencimiento) > new Date(), // Solo licencias vigentes
-        )
-
-        return {
-          ...titular,
-          licencia: licencia || null,
-        }
-      })
-
-      setResultados(resultadosConLicencia)
-      setIsLoading(false)
+      // Llamar al servicio para buscar titulares
+      const data = await filtrosService.buscarTitularesConLicenciasVigentes(filtros)
+      setResultados(data)
 
       // Animar la aparición de los resultados
       if (resultadosRef.current) {
@@ -118,7 +85,22 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
           { opacity: 1, y: 0, duration: 0.5, ease: "back.out(1.2)" },
         )
       }
-    }, 500)
+    } catch (error) {
+      console.error("Error al buscar titulares:", error)
+
+      // Manejar error de sesión expirada
+      if (error instanceof Error && error.message === "SESSION_EXPIRED") {
+        localStorage.removeItem("auth_token")
+        localStorage.removeItem("user_data")
+        router.push("/session-expired")
+        return
+      }
+
+      setError(error instanceof Error ? error.message : "Error desconocido al buscar titulares")
+      setResultados([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Limpiar filtros
@@ -129,6 +111,7 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
     setNombreApellido("")
     setBusquedaRealizada(false)
     setResultados([])
+    setError(null)
 
     // Animar el reset de los filtros
     if (filtrosRef.current) {
@@ -153,7 +136,7 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
 
       // Agregar título al PDF
       doc.setFontSize(18)
-      doc.text("Reporte de Titulares", 14, 22)
+      doc.text("Reporte de Titulares con Licencias Vigentes", 14, 22)
 
       // Agregar fecha de generación
       doc.setFontSize(11)
@@ -176,12 +159,12 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
 
       // Preparar datos para la tabla
       const tableData = resultados.map((resultado) => [
-        resultado.nombreApellido,
+        `${resultado.nombre} ${resultado.apellido}`,
         `${resultado.tipoDocumento} ${resultado.numeroDocumento}`,
-        `${resultado.grupoSanguineo}${resultado.factorRh}`,
-        resultado.donanteOrganos,
-        resultado.licencia ? `Clase ${resultado.licencia.claseLicencia}` : "Sin licencia",
-        resultado.licencia ? formatDate(resultado.licencia.fechaVencimiento) : "-",
+        `${resultado.grupoSanguineo}${resultado.factorRh === "POSITIVO" ? "+" : "-"}`,
+        resultado.donanteOrganos ? "Si" : "No",
+        `Clase ${resultado.claseLicencia}`,
+        formatDate(resultado.fechaVencimiento),
       ])
 
       // Generar tabla en el PDF
@@ -203,7 +186,7 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
       }
 
       // Guardar el PDF
-      doc.save(`titulares-filtrados-${new Date().toISOString().split("T")[0]}.pdf`)
+      doc.save(`titulares-licencias-vigentes-${new Date().toISOString().split("T")[0]}.pdf`)
 
       toast({
         title: "Exportación completada",
@@ -259,9 +242,9 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id="grupo-0"
-                      checked={gruposSanguineos.includes("0")}
-                      onCheckedChange={() => handleGrupoSanguineoChange("0")}
+                      id="grupo-o"
+                      checked={gruposSanguineos.includes("O")} 
+                      onCheckedChange={() => handleGrupoSanguineoChange("O")} 
                     />
                     <Label htmlFor="grupo-0">Grupo 0</Label>
                   </div>
@@ -424,7 +407,11 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                   </div>
                 </div>
 
-                {resultados.length > 0 ? (
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : resultados.length > 0 ? (
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
@@ -440,33 +427,23 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                       <TableBody>
                         {resultados.map((resultado) => (
                           <TableRow key={`${resultado.tipoDocumento}-${resultado.numeroDocumento}`}>
-                            <TableCell className="font-medium">{resultado.nombreApellido}</TableCell>
+                            <TableCell className="font-medium">{`${resultado.nombre} ${resultado.apellido}`}</TableCell>
                             <TableCell>
                               {resultado.tipoDocumento} {resultado.numeroDocumento}
                             </TableCell>
                             <TableCell>
                               {resultado.grupoSanguineo}
-                              {resultado.factorRh}
+                              {resultado.factorRh === "POSITIVO" ? "+" : "-"}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={resultado.donanteOrganos === "Si" ? "success" : "secondary"}>
-                                {resultado.donanteOrganos}
+                              <Badge variant={resultado.donanteOrganos ? "success" : "secondary"}>
+                                {resultado.donanteOrganos ? "Si" : "No"}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              {resultado.licencia ? (
-                                <Badge variant="outline">Clase {resultado.licencia.claseLicencia}</Badge>
-                              ) : (
-                                <span className="text-slate-500 dark:text-slate-400 text-sm">Sin licencia</span>
-                              )}
+                              <Badge variant="outline">Clase {resultado.claseLicencia}</Badge>
                             </TableCell>
-                            <TableCell>
-                              {resultado.licencia ? (
-                                formatDate(resultado.licencia.fechaVencimiento)
-                              ) : (
-                                <span className="text-slate-500 dark:text-slate-400 text-sm">-</span>
-                              )}
-                            </TableCell>
+                            <TableCell>{formatDate(resultado.fechaVencimiento)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

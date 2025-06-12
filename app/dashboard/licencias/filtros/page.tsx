@@ -57,7 +57,7 @@ export default function FiltrosAvanzados() {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold mb-2 text-slate-800 dark:text-white">Filtros Avanzados</h1>
           <p className="text-slate-600 dark:text-slate-300 mb-8">
-            Busque titulares por grupo sanguíneo, factor RH y condición de donante
+            Busque titulares por nombre/apellido, grupo sanguíneo, factor RH y condición de donante que tengan asociada una licencia de conducir.
           </p>
 
           <FiltrosAvanzadosForm role={role} />
