@@ -14,67 +14,15 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 import gsap from "gsap"
 import { useToast } from "@/hooks/use-toast"
+import { usuarioService } from "@/services/usuario-service"
+import type { Usuario } from "@/types/usuario-types"
 
-// Datos de ejemplo para operadores -se tiene q borrar 
-const operadoresEjemplo = [
-  {
-    id: 1,
-    nombre: "Juan",
-    apellido: "Pérez",
-    email: "jperez@municipio.gob",
-    fechaNacimiento: "1985-06-15",
-    activo: true,
-    rol: "OPERADOR",
-  },
-  {
-    id: 2,
-    nombre: "María",
-    apellido: "González",
-    email: "mgonzalez@municipio.gob",
-    fechaNacimiento: "1990-03-22",
-    activo: true,
-    rol: "OPERADOR",
-  },
-  {
-    id: 3,
-    nombre: "Carlos",
-    apellido: "Rodríguez",
-    email: "crodriguez@municipio.gob",
-    fechaNacimiento: "1988-11-10",
-    activo: false,
-    rol: "OPERADOR",
-  },
-]
-
-// Esquema de validación para el formulario
+// Esquema de validación actualizado
 const formSchema = z
   .object({
     nombre: z.string().min(2, "Ingrese un nombre válido"),
     apellido: z.string().min(2, "Ingrese un apellido válido"),
-    fechaNacimiento: z
-      .string()
-      .min(1, "Seleccione una fecha de nacimiento")
-      .refine(
-        (value) => {
-          const fechaNacimiento = new Date(value)
-          const hoy = new Date()
-
-          // Calcular edad
-          let edad = hoy.getFullYear() - fechaNacimiento.getFullYear()
-          const m = hoy.getMonth() - fechaNacimiento.getMonth()
-
-          // Ajustar edad si aún no ha cumplido años en este año
-          if (m < 0 || (m === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
-            edad--
-          }
-
-          return edad >= 18
-        },
-        {
-          message: "El operador debe ser mayor de edad",
-        },
-      ),
-    email: z.string().min(1, "El email es obligatorio").email("Ingrese un email válido"),
+    mail: z.string().min(1, "El email es obligatorio").email("Ingrese un email válido"),
     cambiarPassword: z.boolean().default(false),
     password: z.string().optional(),
     confirmPassword: z.string().optional(),
@@ -105,8 +53,9 @@ interface EditarOperadorFormProps {
 
 export default function EditarOperadorForm({ operadorId, role, onSuccess, onCancel }: EditarOperadorFormProps) {
   const [success, setSuccess] = useState(false)
-  const [operador, setOperador] = useState<any>(null)
+  const [operador, setOperador] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [cambiarPassword, setCambiarPassword] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -119,8 +68,7 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
     defaultValues: {
       nombre: "",
       apellido: "",
-      fechaNacimiento: "",
-      email: "",
+      mail: "",
       cambiarPassword: false,
       password: "",
       confirmPassword: "",
@@ -128,51 +76,42 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
   })
 
   useEffect(() => {
-    // Simulamos la carga de datos del operador
-    const cargarOperador = async () => {
-      setLoading(true)
-      try {
-        // En un entorno real, esto sería una llamada a la API
-        await new Promise((resolve) => setTimeout(resolve, 800))
+    cargarOperador()
+  }, [operadorId])
 
-        // Buscar el operador por ID en los datos de ejemplo
-        const operadorEncontrado = operadoresEjemplo.find((op) => op.id === operadorId)
-
-        if (operadorEncontrado) {
-          setOperador(operadorEncontrado)
-
-          // Establecer los valores por defecto en el formulario
-          form.reset({
-            nombre: operadorEncontrado.nombre,
-            apellido: operadorEncontrado.apellido,
-            fechaNacimiento: operadorEncontrado.fechaNacimiento,
-            email: operadorEncontrado.email,
-            cambiarPassword: false,
-            password: "",
-            confirmPassword: "",
-          })
-        } else {
-          toast({
-            title: "Error",
-            description: "No se encontró el operador",
-            variant: "destructive",
-          })
-          onCancel && onCancel()
-        }
-      } catch (error) {
-        console.error("Error al cargar operador:", error)
+  const cargarOperador = async () => {
+    setLoading(true)
+    try {
+      const response = await usuarioService.obtenerUsuario(operadorId)
+      if (response.success && response.usuario) {
+        setOperador(response.usuario)
+        form.reset({
+          nombre: response.usuario.nombre,
+          apellido: response.usuario.apellido,
+          mail: response.usuario.mail,
+          cambiarPassword: false,
+          password: "",
+          confirmPassword: "",
+        })
+      } else {
         toast({
           title: "Error",
-          description: "No se pudo cargar los datos del operador",
+          description: response.message,
           variant: "destructive",
         })
-      } finally {
-        setLoading(false)
+        onCancel && onCancel()
       }
+    } catch (error) {
+      console.error("Error al cargar operador:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo cargar los datos del operador",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    cargarOperador()
-  }, [operadorId, form, toast, onCancel])
+  }
 
   useEffect(() => {
     // Animación de los campos del formulario
@@ -208,20 +147,39 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
   }, [loading])
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true)
     try {
-      // Simulamos la llamada a la API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const updateData: any = {
+        nombre: values.nombre,
+        apellido: values.apellido,
+        mail: values.mail,
+        roles: operador?.roles || ["OPERADOR"],
+      }
 
-      setSuccess(true)
-      toast({
-        title: "Éxito",
-        description: "Operador actualizado correctamente",
-      })
+      if (values.cambiarPassword && values.password) {
+        updateData.password = values.password
+      }
 
-      // Redireccionar después de 2 segundos
-      setTimeout(() => {
-        if (onSuccess) onSuccess()
-      }, 2000)
+      const response = await usuarioService.actualizarUsuario(operadorId, updateData)
+
+      if (response.success) {
+        setSuccess(true)
+        toast({
+          title: "Éxito",
+          description: "Operador actualizado correctamente",
+        })
+
+        // Redireccionar después de 2 segundos
+        setTimeout(() => {
+          if (onSuccess) onSuccess()
+        }, 2000)
+      } else {
+        toast({
+          title: "Error",
+          description: response.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error al actualizar operador:", error)
       toast({
@@ -229,6 +187,8 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
         description: "Ocurrió un error al actualizar el operador",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -302,21 +262,7 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
 
                 <FormField
                   control={form.control}
-                  name="fechaNacimiento"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Nacimiento *</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
+                  name="mail"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email *</FormLabel>
@@ -362,7 +308,7 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
                                   variant="ghost"
                                   size="icon"
                                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                  onClick={togglePasswordVisibility}
+                                  onClick={() => setShowPassword(!showPassword)}
                                 >
                                   {showPassword ? (
                                     <EyeOff className="h-4 w-4 text-slate-400" />
@@ -395,7 +341,7 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
                                   variant="ghost"
                                   size="icon"
                                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                  onClick={toggleConfirmPasswordVisibility}
+                                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                 >
                                   {showConfirmPassword ? (
                                     <EyeOff className="h-4 w-4 text-slate-400" />
@@ -420,12 +366,17 @@ export default function EditarOperadorForm({ operadorId, role, onSuccess, onCanc
                   variant="outline"
                   onClick={onCancel}
                   className="transition-transform duration-300 hover:scale-105"
+                  disabled={isSubmitting}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Cancelar
                 </Button>
-                <Button type="submit" className="transition-transform duration-300 hover:scale-105">
-                  Guardar Cambios
+                <Button
+                  type="submit"
+                  className="transition-transform duration-300 hover:scale-105"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Guardando..." : "Guardar Cambios"}
                 </Button>
               </div>
             </form>

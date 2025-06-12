@@ -1,39 +1,30 @@
-// Definición de roles de usuario
-export enum Rol {
-  SUPER_USER = "SUPER_USER",
-  OPERADOR = "OPERADOR",
-}
-
-// Interfaz para el usuario
 export interface Usuario {
   id?: number
   nombre: string
   apellido: string
-  fechaNacimiento: string // Formato ISO: YYYY-MM-DD
-  email: string
+  mail: string // Cambiar de email a mail
   password?: string // Opcional en respuestas
-  rol: Rol
+  roles: string[] // Cambiar de rol: Rol a roles: string[]
   activo?: boolean
 }
 
-// Interfaz para la creación de un usuario
+// Actualizar la interfaz para crear usuario
 export interface CrearUsuarioRequest {
   nombre: string
   apellido: string
-  fechaNacimiento: string
-  email: string
+  mail: string // Cambiar de email a mail
   password: string
-  rol: Rol
+  roles: string[] // Cambiar de rol: Rol a roles: string[]
 }
 
-// Interfaz para la respuesta de creación de usuario
+// Actualizar la respuesta de creación
 export interface CrearUsuarioResponse {
   success: boolean
   message: string
   usuario?: Usuario
 }
 
-// Interfaz para listar usuarios
+// Mantener la respuesta de listar usuarios
 export interface ListarUsuariosResponse {
   success: boolean
   usuarios: Usuario[]

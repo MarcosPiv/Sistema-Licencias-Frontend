@@ -4,41 +4,10 @@ import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, Pencil } from "lucide-react"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
+import { XCircle, Pencil, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-// Datos de ejemplo para operadores- hay q eliminar
-const operadoresEjemplo = [
-  {
-    id: 1,
-    nombre: "Juan",
-    apellido: "Pérez",
-    email: "jperez@municipio.gob",
-    fechaNacimiento: "1985-06-15",
-    activo: true,
-    rol: "OPERADOR",
-  },
-  {
-    id: 2,
-    nombre: "María",
-    apellido: "González",
-    email: "mgonzalez@municipio.gob",
-    fechaNacimiento: "1990-03-22",
-    activo: true,
-    rol: "OPERADOR",
-  },
-  {
-    id: 3,
-    nombre: "Carlos",
-    apellido: "Rodríguez",
-    email: "crodriguez@municipio.gob",
-    fechaNacimiento: "1988-11-10",
-    activo: false,
-    rol: "OPERADOR",
-  },
-]
+import { usuarioService } from "@/services/usuario-service"
+import type { Usuario } from "@/types/usuario-types"
 
 interface OperadoresGridProps {
   role: string
@@ -46,31 +15,56 @@ interface OperadoresGridProps {
 }
 
 export default function OperadoresGrid({ role, onEdit }: OperadoresGridProps) {
-  const [usuarios, setUsuarios] = useState(operadoresEjemplo)
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
   useEffect(() => {
-    // Simulamos la carga de datos
-    const timeout = setTimeout(() => {
-      setLoading(false)
-    }, 1000)
-
-    return () => clearTimeout(timeout)
+    cargarUsuarios()
   }, [])
+
+  const cargarUsuarios = async () => {
+    setLoading(true)
+    try {
+      const response = await usuarioService.listarUsuarios()
+      if (response.success) {
+        setUsuarios(response.usuarios)
+      } else {
+        toast({
+          title: "Error",
+          description: response.message,
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error al cargar usuarios:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los operadores",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const cambiarEstado = async (id: number, nuevoEstado: boolean) => {
     try {
-      // Simulamos la llamada a la API
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Actualizamos la lista local
-      setUsuarios(usuarios.map((u) => (u.id === id ? { ...u, activo: nuevoEstado } : u)))
-
-      toast({
-        title: "Éxito",
-        description: `Operador ${nuevoEstado ? "activado" : "desactivado"} correctamente`,
-      })
+      const result = await usuarioService.cambiarEstadoUsuario(id, nuevoEstado)
+      if (result.success) {
+        // Recargar la lista
+        await cargarUsuarios()
+        toast({
+          title: "Éxito",
+          description: `Operador ${nuevoEstado ? "activado" : "desactivado"} correctamente`,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error al cambiar estado:", error)
       toast({
@@ -110,7 +104,7 @@ export default function OperadoresGrid({ role, onEdit }: OperadoresGridProps) {
           <TableRow>
             <TableHead>Nombre</TableHead>
             <TableHead>Email</TableHead>
-            <TableHead>Fecha Nacimiento</TableHead>
+            <TableHead>Roles</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
@@ -121,8 +115,16 @@ export default function OperadoresGrid({ role, onEdit }: OperadoresGridProps) {
               <TableCell className="font-medium">
                 {usuario.nombre} {usuario.apellido}
               </TableCell>
-              <TableCell>{usuario.email}</TableCell>
-              <TableCell>{format(new Date(usuario.fechaNacimiento), "dd/MM/yyyy", { locale: es })}</TableCell>
+              <TableCell>{usuario.mail}</TableCell>
+              <TableCell>
+                <div className="flex gap-1">
+                  {usuario.roles?.map((rol, index) => (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {rol}
+                    </Badge>
+                  ))}
+                </div>
+              </TableCell>
               <TableCell>
                 {usuario.activo ? (
                   <Badge className="bg-green-500 hover:bg-green-600">Activo</Badge>
@@ -137,30 +139,33 @@ export default function OperadoresGrid({ role, onEdit }: OperadoresGridProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleEdit(usuario.id)}
+                    onClick={() => handleEdit(usuario.id!)}
                     className="transition-transform duration-300 hover:scale-105"
                   >
                     <Pencil className="h-4 w-4 mr-1" />
                     Editar
                   </Button>
-                  <Button
-                    variant={usuario.activo ? "destructive" : "default"}
-                    size="sm"
-                    onClick={() => cambiarEstado(usuario.id, !usuario.activo)}
-                    className="transition-transform duration-300 hover:scale-105"
-                  >
-                    {usuario.activo ? (
-                      <>
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Desactivar
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Activar
-                      </>
-                    )}
-                  </Button>
+                  {usuario.activo ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => cambiarEstado(usuario.id!, false)}
+                      className="transition-transform duration-300 hover:scale-105"
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Desactivar
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => cambiarEstado(usuario.id!, true)}
+                      className="transition-transform duration-300 hover:scale-105"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Activar
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

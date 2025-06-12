@@ -12,36 +12,14 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 import gsap from "gsap"
 import { useToast } from "@/hooks/use-toast"
+import { usuarioService } from "@/services/usuario-service"
 
-// Esquema de validación para el formulario
+// Esquema de validación actualizado
 const formSchema = z
   .object({
     nombre: z.string().min(2, "Ingrese un nombre válido"),
     apellido: z.string().min(2, "Ingrese un apellido válido"),
-    fechaNacimiento: z
-      .string()
-      .min(1, "Seleccione una fecha de nacimiento")
-      .refine(
-        (value) => {
-          const fechaNacimiento = new Date(value)
-          const hoy = new Date()
-
-          // Calcular edad
-          let edad = hoy.getFullYear() - fechaNacimiento.getFullYear()
-          const m = hoy.getMonth() - fechaNacimiento.getMonth()
-
-          // Ajustar edad si aún no ha cumplido años en este año
-          if (m < 0 || (m === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
-            edad--
-          }
-
-          return edad >= 18
-        },
-        {
-          message: "El operador debe ser mayor de edad",
-        },
-      ),
-    email: z.string().min(1, "El email es obligatorio").email("Ingrese un email válido"),
+    mail: z.string().min(1, "El email es obligatorio").email("Ingrese un email válido"),
     password: z
       .string()
       .min(6, "La contraseña debe tener al menos 6 caracteres")
@@ -62,6 +40,7 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
   const [success, setSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const formFieldsRef = useRef<HTMLDivElement>(null)
   const buttonsRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
@@ -71,8 +50,7 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
     defaultValues: {
       nombre: "",
       apellido: "",
-      fechaNacimiento: "",
-      email: "",
+      mail: "",
       password: "",
       confirmPassword: "",
     },
@@ -112,20 +90,34 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
   }, [])
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true)
     try {
-      // Simulamos la llamada a la API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      setSuccess(true)
-      toast({
-        title: "Éxito",
-        description: "Operador registrado correctamente",
+      const response = await usuarioService.crearUsuario({
+        nombre: values.nombre,
+        apellido: values.apellido,
+        mail: values.mail,
+        password: values.password,
+        roles: ["OPERADOR"],
       })
 
-      // Redireccionar después de 2 segundos
-      setTimeout(() => {
-        if (onSuccess) onSuccess()
-      }, 2000)
+      if (response.success) {
+        setSuccess(true)
+        toast({
+          title: "Éxito",
+          description: "Operador registrado correctamente",
+        })
+
+        // Redireccionar después de 2 segundos
+        setTimeout(() => {
+          if (onSuccess) onSuccess()
+        }, 2000)
+      } else {
+        toast({
+          title: "Error",
+          description: response.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error al registrar operador:", error)
       toast({
@@ -133,6 +125,8 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
         description: "Ocurrió un error al registrar el operador",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -182,21 +176,7 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
 
                 <FormField
                   control={form.control}
-                  name="fechaNacimiento"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Nacimiento *</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
+                  name="mail"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email *</FormLabel>
@@ -285,12 +265,17 @@ export default function AltaOperadorForm({ role, onSuccess }: AltaOperadorFormPr
                   variant="outline"
                   onClick={() => onSuccess && onSuccess()}
                   className="transition-transform duration-300 hover:scale-105"
+                  disabled={isSubmitting}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Cancelar
                 </Button>
-                <Button type="submit" className="transition-transform duration-300 hover:scale-105">
-                  Registrar Operador
+                <Button
+                  type="submit"
+                  className="transition-transform duration-300 hover:scale-105"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Registrando..." : "Registrar Operador"}
                 </Button>
               </div>
             </form>
