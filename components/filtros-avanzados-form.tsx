@@ -7,14 +7,18 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { ArrowLeft, Search, Filter, User } from "lucide-react"
+import { ArrowLeft, Search, Filter, User, Download } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
 import { titularesDB } from "@/data/titular-data"
 import { licenciasEmitidas } from "@/data/licencia-data"
 import gsap from "gsap"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 interface FiltrosAvanzadosFormProps {
   role: string
@@ -22,12 +26,15 @@ interface FiltrosAvanzadosFormProps {
 
 export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [gruposSanguineos, setGruposSanguineos] = useState<string[]>([])
   const [factorRh, setFactorRh] = useState<string>("")
   const [soloDonanteOrganos, setSoloDonanteOrganos] = useState<boolean>(false)
+  const [nombreApellido, setNombreApellido] = useState<string>("")
   const [resultados, setResultados] = useState<any[]>([])
   const [busquedaRealizada, setBusquedaRealizada] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [isExporting, setIsExporting] = useState<boolean>(false)
 
   const formRef = useRef<HTMLDivElement>(null)
   const filtrosRef = useRef<HTMLDivElement>(null)
@@ -60,6 +67,14 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
     setTimeout(() => {
       // Filtrar titulares según los criterios seleccionados
       let titularesFiltrados = [...titularesDB]
+
+      // Filtrar por nombre o apellido si se ha ingresado texto
+      if (nombreApellido.trim()) {
+        const searchTerm = nombreApellido.toLowerCase().trim()
+        titularesFiltrados = titularesFiltrados.filter((titular) =>
+          titular.nombreApellido.toLowerCase().includes(searchTerm),
+        )
+      }
 
       // Filtrar por grupo sanguíneo si hay alguno seleccionado
       if (gruposSanguineos.length > 0) {
@@ -111,12 +126,99 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
     setGruposSanguineos([])
     setFactorRh("")
     setSoloDonanteOrganos(false)
+    setNombreApellido("")
     setBusquedaRealizada(false)
     setResultados([])
 
     // Animar el reset de los filtros
     if (filtrosRef.current) {
       gsap.fromTo(filtrosRef.current, { scale: 0.98 }, { scale: 1, duration: 0.3, ease: "back.out(1.7)" })
+    }
+
+    // Mostrar toast de confirmación
+    toast({
+      title: "Filtros limpiados",
+      description: "Se han restablecido todos los filtros de búsqueda",
+      variant: "default",
+    })
+  }
+
+  // Exportar resultados a PDF
+  const exportarAPDF = async () => {
+    try {
+      setIsExporting(true)
+
+      // Crear un nuevo documento PDF
+      const doc = new jsPDF()
+
+      // Agregar título al PDF
+      doc.setFontSize(18)
+      doc.text("Reporte de Titulares", 14, 22)
+
+      // Agregar fecha de generación
+      doc.setFontSize(11)
+      doc.text(`Fecha: ${new Date().toLocaleDateString("es-AR")}`, 14, 30)
+
+      // Agregar filtros aplicados
+      const filtrosTexto = "Filtros aplicados: "
+      const filtrosAplicados = []
+
+      if (nombreApellido) filtrosAplicados.push(`Nombre/Apellido: ${nombreApellido}`)
+      if (gruposSanguineos.length > 0) filtrosAplicados.push(`Grupos sanguíneos: ${gruposSanguineos.join(", ")}`)
+      if (factorRh) filtrosAplicados.push(`Factor RH: ${factorRh}`)
+      if (soloDonanteOrganos) filtrosAplicados.push("Solo donantes")
+
+      doc.text(
+        filtrosAplicados.length > 0 ? filtrosTexto + filtrosAplicados.join("; ") : "Sin filtros aplicados",
+        14,
+        38,
+      )
+
+      // Preparar datos para la tabla
+      const tableData = resultados.map((resultado) => [
+        resultado.nombreApellido,
+        `${resultado.tipoDocumento} ${resultado.numeroDocumento}`,
+        `${resultado.grupoSanguineo}${resultado.factorRh}`,
+        resultado.donanteOrganos,
+        resultado.licencia ? `Clase ${resultado.licencia.claseLicencia}` : "Sin licencia",
+        resultado.licencia ? formatDate(resultado.licencia.fechaVencimiento) : "-",
+      ])
+
+      // Generar tabla en el PDF
+      autoTable(doc, {
+        head: [["Titular", "Documento", "Grupo Sang.", "Donante", "Licencia", "Vencimiento"]],
+        body: tableData,
+        startY: 45,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [70, 70, 70] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+      })
+
+      // Agregar pie de página
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(10)
+        doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 25, doc.internal.pageSize.height - 10)
+      }
+
+      // Guardar el PDF
+      doc.save(`titulares-filtrados-${new Date().toISOString().split("T")[0]}.pdf`)
+
+      toast({
+        title: "Exportación completada",
+        description: "El reporte PDF se ha generado correctamente",
+        variant: "default",
+      })
+    } catch (error) {
+      console.error("Error al exportar a PDF:", error)
+      toast({
+        title: "Error al exportar",
+        description: "No se pudo generar el archivo PDF. Intente nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -141,6 +243,17 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-3">
+                <Label className="text-base">Nombre o Apellido</Label>
+                <Input
+                  type="text"
+                  placeholder="Buscar por nombre o apellido"
+                  value={nombreApellido}
+                  onChange={(e) => setNombreApellido(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
               <div className="space-y-3">
                 <Label className="text-base">Grupo Sanguíneo</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -264,9 +377,51 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                     <User className="h-5 w-5" />
                     Resultados
                   </h2>
-                  <Badge variant="outline">
-                    {resultados.length} {resultados.length === 1 ? "titular encontrado" : "titulares encontrados"}
-                  </Badge>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline">
+                      {resultados.length} {resultados.length === 1 ? "titular encontrado" : "titulares encontrados"}
+                    </Badge>
+                    {resultados.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={exportarAPDF}
+                        disabled={isExporting}
+                        className="flex items-center gap-1"
+                      >
+                        {isExporting ? (
+                          <span className="flex items-center">
+                            <svg
+                              className="animate-spin -ml-1 mr-1 h-4 w-4"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              ></circle>
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              ></path>
+                            </svg>
+                            Exportando...
+                          </span>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            Exportar a PDF
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {resultados.length > 0 ? (
