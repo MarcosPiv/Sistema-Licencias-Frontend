@@ -12,7 +12,6 @@ import Image from "next/image"
 import { jsPDF } from "jspdf"
 import { Input } from "@/components/ui/input"
 import { useIsMobile } from "@/hooks/use-mobile"
-import type { licenciasEmitidas } from "@/data/licencia-data" // Importar desde el archivo compartido
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import gsap from "gsap"
