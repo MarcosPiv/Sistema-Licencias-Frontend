@@ -199,7 +199,9 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         })
       }
 
-      setResultadosBusqueda(resultado.licencias || [])
+      setResultadosBusqueda(
+        (resultado.licencias || []).filter((licencia) => licencia.estado === "VIGENTE")
+      ) 
 
       // Si solo hay un resultado, seleccionarlo automáticamente
       if (resultado.licencias && resultado.licencias.length === 1) {
@@ -367,7 +369,9 @@ export default function ImprimirLicenciaFormMobile({ role }: ImprimirLicenciaFor
         })
       }
 
-      setResultadosBusqueda(resultado.licencias || [])
+    setResultadosBusqueda(
+      (resultado.licencias || []).filter((licencia) => licencia.estado === "VIGENTE")
+    )
     } catch (error) {
       console.error("Error al buscar licencias:", error)
       setErrorBusqueda("Error al conectar con el servidor. Intente nuevamente.")
