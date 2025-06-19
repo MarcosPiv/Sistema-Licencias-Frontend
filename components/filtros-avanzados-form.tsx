@@ -158,7 +158,7 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
       )
 
       // Preparar datos para la tabla
-      const tableData = resultados.map((resultado) => [
+      const tableData = resultados.map((resultado, index) => [
         `${resultado.nombre} ${resultado.apellido}`,
         `${resultado.tipoDocumento} ${resultado.numeroDocumento}`,
         `${resultado.grupoSanguineo}${resultado.factorRh === "POSITIVO" ? "+" : "-"}`,
@@ -242,9 +242,9 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id="grupo-o"
-                      checked={gruposSanguineos.includes("O")} 
-                      onCheckedChange={() => handleGrupoSanguineoChange("O")} 
+                      id="grupo-0"
+                      checked={gruposSanguineos.includes("0")}
+                      onCheckedChange={() => handleGrupoSanguineoChange("0")}
                     />
                     <Label htmlFor="grupo-0">Grupo 0</Label>
                   </div>
@@ -425,8 +425,8 @@ export default function FiltrosAvanzadosForm({ role }: FiltrosAvanzadosFormProps
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {resultados.map((resultado) => (
-                          <TableRow key={`${resultado.tipoDocumento}-${resultado.numeroDocumento}`}>
+                        {resultados.map((resultado, index) => (
+                          <TableRow key={`${resultado.tipoDocumento}-${resultado.numeroDocumento}-${index}`}>
                             <TableCell className="font-medium">{`${resultado.nombre} ${resultado.apellido}`}</TableCell>
                             <TableCell>
                               {resultado.tipoDocumento} {resultado.numeroDocumento}

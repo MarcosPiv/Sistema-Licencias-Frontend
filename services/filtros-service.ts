@@ -49,7 +49,9 @@ class FiltrosService {
     // Agregar cada grupo sanguíneo como un parámetro separado
     if (filtros.gruposSanguineos && filtros.gruposSanguineos.length > 0) {
       filtros.gruposSanguineos.forEach((grupo) => {
-        params.append("grupoSanguineo", grupo)
+        // Convertir "0" a "O" para el backend
+        const grupoCorregido = grupo === "0" ? "O" : grupo
+        params.append("grupoSanguineo", grupoCorregido)
       })
     }
 

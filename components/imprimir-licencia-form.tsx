@@ -679,11 +679,6 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
         pdf.setFillColor(240, 240, 240)
         pdf.rect(margin, margin, contentWidth, 25, "F")
 
-        // Logo eliminado por solicitud del usuario
-        // Añadir logo (simulado con un rectángulo)
-        // pdf.setFillColor(200, 200, 200)
-        // pdf.rect(margin + 5, margin + 5, 15, 15, "F")
-
         // Título del comprobante
         pdf.setFont("helvetica", "bold")
         pdf.setFontSize(16)
@@ -917,7 +912,7 @@ export default function ImprimirLicenciaForm({ role }: ImprimirLicenciaFormProps
                                 <div className="text-right">
                                   <p className="text-sm dark:text-white">N° {licencia.numeroLicencia}</p>
                                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Vence: {new Date(licencia.fechaVencimiento).toLocaleDateString("es-ES")}
+                                    Vence: {formatearFecha(licencia.fechaVencimiento)}
                                   </p>
                                 </div>
                               </div>
