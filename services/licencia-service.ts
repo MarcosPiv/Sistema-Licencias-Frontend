@@ -442,7 +442,7 @@ export const licenciaService = {
   },
 
   // Emitir copia de una licencia
-  emitirCopia: async (licenciaId: number, motivo: string): Promise<LicenciaResponse> => {
+  emitirCopia: async (licenciaOriginalId: number, motivo: string): Promise<LicenciaResponse> => {
     try {
       // Verificar autenticación
       const token = localStorage.getItem("auth_token")
@@ -462,15 +462,18 @@ export const licenciaService = {
         }
       }
 
-      const datosConEmisor = {
-        motivo,
+      const datosParaEnviar = {
+        licenciaOriginalId: licenciaOriginalId,
+        motivo: motivo,
         emisor: usuarioActual.mail,
       }
 
-      const response = await fetch(`${API_URL}/licencias/${licenciaId}/copia`, {
+      console.log("Datos a enviar para emisión de copia:", datosParaEnviar)
+
+      const response = await fetch(`${API_URL}/licencias/copias`, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify(datosConEmisor),
+        body: JSON.stringify(datosParaEnviar),
       })
 
       if (handleAuthError(response)) {
@@ -480,16 +483,20 @@ export const licenciaService = {
         }
       }
 
+      // Intentar obtener el texto de la respuesta
+      const responseText = await response.text()
+      console.log("Respuesta del servidor:", responseText)
+
       if (!response.ok) {
-        const errorText = await response.text()
+        // Intentar parsear el error como JSON
         let errorMessage = `Error ${response.status}: ${response.statusText}`
 
         try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.message || errorData.error || errorMessage
-        } catch (e) {
-          if (errorText.trim()) {
-            errorMessage = errorText
+          const errorData = JSON.parse(responseText)
+          errorMessage = errorData.message || errorData.error || errorData.details || errorMessage
+        } catch (parseError) {
+          if (responseText.trim()) {
+            errorMessage = responseText
           }
         }
 
@@ -499,9 +506,58 @@ export const licenciaService = {
         }
       }
 
-      return await response.json()
+      // Intentar parsear la respuesta exitosa
+      let responseData
+      try {
+        responseData = responseText ? JSON.parse(responseText) : {}
+      } catch (parseError) {
+        console.error("Error al parsear respuesta exitosa:", parseError)
+        return {
+          success: false,
+          message: "Error al procesar la respuesta del servidor",
+        }
+      }
+
+      // Transformar la respuesta del backend al formato esperado por el frontend
+      const copiaDeLicencia: Licencia = {
+        id: responseData.id,
+        numeroLicencia: responseData.id.toString(),
+        titular: {
+          id: responseData.titular.id,
+          tipoDocumento: responseData.titular.tipoDocumento,
+          numeroDocumento: responseData.titular.numeroDocumento,
+          nombreApellido: `${responseData.titular.apellido}, ${responseData.titular.nombre}`,
+          fechaNacimiento: responseData.titular.fechaNacimiento,
+          direccion: responseData.titular.direccion,
+          grupoSanguineo: responseData.titular.grupoSanguineo,
+          factorRh: responseData.titular.factorRh === "POSITIVO" ? "+" : "-",
+          donanteOrganos: responseData.titular.donanteOrganos ? "SÍ" : "NO",
+        },
+        claseLicencia: responseData.clase,
+        fechaEmision: responseData.fechaEmision,
+        fechaVencimiento: responseData.fechaVencimiento,
+        vigencia: responseData.vigenciaAnios,
+        costo: responseData.costo,
+        estado: responseData.vigente ? "VIGENTE" : "VENCIDA",
+        observaciones: responseData.motivoCopia || "",
+      }
+
+      return {
+        success: true,
+        message: "Copia de licencia emitida correctamente",
+        licencia: copiaDeLicencia,
+      }
     } catch (error) {
-      console.error(`Error al emitir copia de licencia con ID ${licenciaId}:`, error)
+      console.error(`Error al emitir copia de licencia con ID ${licenciaOriginalId}:`, error)
+
+      // Manejar errores de red
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        return {
+          success: false,
+          message: "Error de conexión. Verifique su conexión a internet e intente nuevamente.",
+        }
+      }
+
       return {
         success: false,
         message: error instanceof Error ? error.message : "Error desconocido al emitir copia",

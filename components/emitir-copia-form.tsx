@@ -23,9 +23,9 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { licenciasEmitidas } from "@/data/licencia-data"
 import gsap from "gsap"
 import { useStats } from "@/contexts/stats-context"
+import { licenciaService, type Licencia } from "@/services/licencia-service"
 
 // Costo fijo para emitir una copia
 const COSTO_COPIA = 50
@@ -38,8 +38,8 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
   const router = useRouter()
   const [tipoDocumento, setTipoDocumento] = useState("")
   const [numeroDocumento, setNumeroDocumento] = useState("")
-  const [licenciasEncontradas, setLicenciasEncontradas] = useState<typeof licenciasEmitidas>([])
-  const [licenciaSeleccionada, setLicenciaSeleccionada] = useState<(typeof licenciasEmitidas)[0] | null>(null)
+  const [licenciasEncontradas, setLicenciasEncontradas] = useState<Licencia[]>([])
+  const [licenciaSeleccionada, setLicenciaSeleccionada] = useState<Licencia | null>(null)
   const [motivoCopia, setMotivoCopia] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
@@ -69,6 +69,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
     setLicenciasEncontradas([]) // Limpiar licencias encontradas
     setLicenciaSeleccionada(null) // Limpiar licencia seleccionada
     setMostrarListaLicencias(false) // Ocultar lista de licencias
+    setError("") // Limpiar errores
   }
 
   // Manejar cambio en el número de documento
@@ -91,10 +92,11 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
     setLicenciasEncontradas([])
     setLicenciaSeleccionada(null)
     setMostrarListaLicencias(false)
+    setError("") // Limpiar errores
   }
 
-  // Función para buscar licencias
-  const buscarLicencia = () => {
+  // Función para buscar licencias usando el servicio real
+  const buscarLicencia = async () => {
     setError("")
     setLicenciasEncontradas([])
     setLicenciaSeleccionada(null)
@@ -115,17 +117,38 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
       return
     }
 
-    // Simular una pequeña demora para mostrar el estado de carga 
-    setTimeout(() => {
-      // Buscar todas las licencias asociadas al documento
-      const licenciasDelTitular = licenciasEmitidas.filter(
-        (licencia) =>
-          licencia.titular.tipoDocumento === tipoDocumento && licencia.titular.numeroDocumento === numeroDocumento,
-      )
+    try {
+      // Buscar licencias usando el servicio real
+      const resultado = await licenciaService.buscarLicenciasPorTitular(tipoDocumento, numeroDocumento)
 
-      if (licenciasDelTitular.length === 0) {
-        setError("No se encontró ninguna licencia con los datos ingresados")
+      if (!resultado.success) {
+        // Manejar error de sesión expirada
+        if (resultado.message.includes("Sesión expirada")) {
+          router.push("/session-expired")
+          return
+        }
+
+        setError(resultado.message || "No se encontraron licencias con los datos ingresados")
         setIsLoading(false)
+
+        // Animación de error mejorada
+        if (busquedaRef.current) {
+          gsap.fromTo(
+            busquedaRef.current,
+            { x: -8 },
+            { x: 8, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+          )
+        }
+        return
+      }
+
+      // Filtrar solo las licencias vigentes
+      const licenciasVigentes = resultado.licencias?.filter((licencia) => licencia.estado === "VIGENTE") || []
+
+      if (licenciasVigentes.length === 0) {
+        setError("No se encontraron licencias vigentes para este titular")
+        setIsLoading(false)
+
         // Animación de error mejorada
         if (busquedaRef.current) {
           gsap.fromTo(
@@ -151,7 +174,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
               opacity: 0.8,
               duration: 0.3,
               onComplete: () => {
-                setLicenciasEncontradas(licenciasDelTitular)
+                setLicenciasEncontradas(licenciasVigentes)
                 setMostrarListaLicencias(true)
                 setIsLoading(false)
 
@@ -170,16 +193,29 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
           },
         })
       } else {
-        setLicenciasEncontradas(licenciasDelTitular)
+        setLicenciasEncontradas(licenciasVigentes)
         setMostrarListaLicencias(true)
         setIsLoading(false)
       }
-    }, 500)
+    } catch (error) {
+      console.error("Error al buscar licencias:", error)
+      setError("Error de conexión. Por favor, intente nuevamente.")
+      setIsLoading(false)
+
+      // Animación de error mejorada
+      if (busquedaRef.current) {
+        gsap.fromTo(
+          busquedaRef.current,
+          { x: -8 },
+          { x: 8, duration: 0.1, repeat: 5, yoyo: true, ease: "power2.inOut" },
+        )
+      }
+    }
   }
 
   // Función para seleccionar una licencia específica
-  const seleccionarLicencia = (licencia: (typeof licenciasEmitidas)[0]) => {
-    // Verificar si la licencia está vencida
+  const seleccionarLicencia = (licencia: Licencia) => {
+    // Verificar si la licencia está vencida (doble verificación)
     const fechaVencimiento = new Date(licencia.fechaVencimiento)
     const hoy = new Date()
 
@@ -233,7 +269,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
   }
 
   // Confirmar emisión de copia
-  const confirmarEmisionCopia = () => {
+  const confirmarEmisionCopia = async () => {
     if (!motivoCopia) {
       setError("Debe seleccionar un motivo para la emisión de la copia")
       // Animar el campo de motivo
@@ -255,40 +291,68 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
       return
     }
 
+    if (!licenciaSeleccionada) {
+      setError("No hay licencia seleccionada")
+      return
+    }
+
+    setIsLoading(true)
+    setError("")
+
     try {
-      // En producción, aquí se enviarían los datos al backend
-      console.log({
-        licenciaOriginal: licenciaSeleccionada,
-        motivoCopia,
-        costo: COSTO_COPIA,
-        fechaEmisionCopia: new Date().toISOString(),
-      })
+      // Mapear el motivo del frontend al formato esperado por el backend
+      const motivoParaBackend =
+        motivoCopia === "perdida"
+          ? "Pérdida del carnet"
+          : motivoCopia === "robo"
+            ? "Robo del carnet"
+            : motivoCopia === "deterioro"
+              ? "Deterioro del carnet"
+              : motivoCopia === "duplicado"
+                ? "Duplicado solicitado"
+                : motivoCopia
 
-      // Incrementar el contador de licencias emitidas
-      incrementLicenciasEmitidas()
+      // Llamar al servicio para emitir la copia usando el ID de la licencia
+      const resultado = await licenciaService.emitirCopia(licenciaSeleccionada.id, motivoParaBackend)
 
-      // Mostrar mensaje de éxito
-      setSuccess(true)
+      if (resultado.success) {
+        // Incrementar el contador de licencias emitidas
+        incrementLicenciasEmitidas()
 
-      // Redireccionar después de 2 segundos
-      setTimeout(() => {
-        router.push(`/dashboard/licencias/imprimir?role=${role}`)
-      }, 2000)
+        // Mostrar mensaje de éxito
+        setSuccess(true)
+
+        // Redireccionar después de 2 segundos
+        setTimeout(() => {
+          router.push(`/dashboard/licencias/imprimir?role=${role}`)
+        }, 2000)
+      } else {
+        // Manejar error de sesión expirada
+        if (resultado.message.includes("Sesión expirada")) {
+          router.push("/session-expired")
+          return
+        }
+
+        setError(resultado.message || "Error al emitir la copia")
+      }
     } catch (error) {
       console.error("Error al emitir copia:", error)
-      setError("Ocurrió un error al emitir la copia. Por favor, intente nuevamente.")
+      setError("Ocurrió un error inesperado al emitir la copia. Por favor, intente nuevamente.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
   // Formatear fecha
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = new Date(dateString);
     return date.toLocaleDateString("es-AR", {
+      timeZone: 'UTC',
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
-    })
-  }
+    });
+  };
 
   // Determinar el estado de la licencia (vencida, próxima a vencer, vigente)
   const getLicenciaEstado = (fechaVencimiento: string) => {
@@ -406,7 +470,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
         <Separator className="dark:bg-slate-700" />
         <div className="space-y-4" ref={listaLicenciasRef}>
           <h2 className="text-xl font-semibold dark:text-white">
-            Licencias de {licenciasEncontradas[0].titular.nombreApellido}
+            Licencias vigentes de {licenciasEncontradas[0].titular.nombreApellido}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Seleccione la licencia para la cual desea emitir una copia:
@@ -418,7 +482,7 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
 
               return (
                 <div
-                  key={licencia.numeroLicencia}
+                  key={licencia.id}
                   className={`p-4 border rounded-lg transition-all duration-200 ${
                     estado.canCopy
                       ? "hover:border-blue-400 hover:shadow-md cursor-pointer"
@@ -569,15 +633,41 @@ export default function EmitirCopiaForm({ role }: EmitirCopiaFormProps) {
           }
         }}
         className="transition-transform duration-300 hover:scale-105"
+        disabled={isLoading}
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
         {licenciaSeleccionada ? "Volver a la lista" : "Volver"}
       </Button>
 
       {licenciaSeleccionada && (
-        <Button onClick={confirmarEmisionCopia} className="transition-transform duration-300 hover:scale-105">
-          <Copy className="h-4 w-4 mr-2" />
-          Emitir Copia
+        <Button
+          onClick={confirmarEmisionCopia}
+          className="transition-transform duration-300 hover:scale-105"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <span className="flex items-center">
+              <svg
+                className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              Emitiendo...
+            </span>
+          ) : (
+            <>
+              <Copy className="h-4 w-4 mr-2" />
+              Emitir Copia
+            </>
+          )}
         </Button>
       )}
     </div>

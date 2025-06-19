@@ -448,13 +448,14 @@ export default function RenovarLicenciaForm({
 
   // Formatear fecha
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = new Date(dateString);
     return date.toLocaleDateString("es-AR", {
+      timeZone: 'UTC',
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
-    })
-  }
+    });
+  };
 
   // Verificar si la licencia está vencida
   const isLicenciaVencida = (fechaVencimiento: string) => {
